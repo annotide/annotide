@@ -1,0 +1,57 @@
+{
+  "nav": {
+    "label": "Main",
+    "projects": "Projects",
+    "admin": "Admin",
+    "connectors": "Connectors",
+    "models": "Models",
+    "webhooks": "Webhooks",
+    "users": "Users",
+    "licence": "Licence",
+    "apiKeys": "API keys",
+    "security": "Security"
+  },
+  "titles": {
+    "app": "Annotide",
+    "signIn": "Sign in",
+    "projects": "Projects",
+    "project": "Project",
+    "dashboard": "Dashboard",
+    "projectSettings": "Project settings",
+    "annotate": "Annotate",
+    "review": "Review",
+    "connectors": "Connectors",
+    "models": "Models",
+    "webhooks": "Webhooks",
+    "apiKeys": "API keys",
+    "licence": "Licence",
+    "security": "Security",
+    "users": "Users",
+    "notFound": "Page not found"
+  },
+  "skipToContent": "Skip to main content",
+  "signOut": "Sign out",
+  "language": "Language",
+  "theme": {
+    "toLight": "Switch to light theme",
+    "toDark": "Switch to dark theme"
+  },
+  "notFound": {
+    "title": "Page not found",
+    "body": "The page you are looking for does not exist or has been moved.",
+    "back": "Back to projects"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "titleUnread": "Notifications, {{count}} unread",
+    "markAllRead": "Mark all read",
+    "empty": "No notifications yet.",
+    "mention": "You were mentioned: {{excerpt}}",
+    "reply": "Reply to your comment: {{excerpt}}",
+    "approved": "Your annotation was approved",
+    "approvedWithComment": "Your annotation was approved: {{comment}}",
+    "rejected": "Your annotation was rejected",
+    "rejectedWithComment": "Your annotation was rejected: {{comment}}",
+    "generic": "Notification"
+  }
+}

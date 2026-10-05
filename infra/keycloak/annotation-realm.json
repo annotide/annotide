@@ -1,0 +1,101 @@
+{
+  "realm": "annotation",
+  "enabled": true,
+  "displayName": "Annotation dev SSO",
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "groups": [
+    {
+      "name": "annotators"
+    },
+    {
+      "name": "reviewers"
+    },
+    {
+      "name": "platform-admins"
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "annotide",
+      "name": "Annotide (dev)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "dev-sso-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:5173/api/v1/auth/oidc/callback",
+        "http://localhost:5174/api/v1/auth/oidc/callback",
+        "http://localhost:8000/api/v1/auth/oidc/callback",
+        "http://localhost:8001/api/v1/auth/oidc/callback"
+      ],
+      "webOrigins": [
+        "+"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:5173/login##http://localhost:5174/login"
+      },
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "groups",
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "false",
+            "userinfo.token.claim": "true",
+            "introspection.token.claim": "false"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "alice",
+      "enabled": true,
+      "email": "alice.sso@example.com",
+      "emailVerified": true,
+      "firstName": "Alice",
+      "lastName": "Annotator",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "alice-dev-password",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "annotators"
+      ]
+    },
+    {
+      "username": "carol",
+      "enabled": true,
+      "email": "carol.sso@example.com",
+      "emailVerified": true,
+      "firstName": "Carol",
+      "lastName": "Admin",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "carol-dev-password",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "platform-admins"
+      ]
+    }
+  ]
+}

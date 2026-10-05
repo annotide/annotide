@@ -1,0 +1,19 @@
+Annotide {{ .Chart.AppVersion }} is installed as "{{ .Release.Name }}".
+
+{{- $public := include "ap.publicUrl" . }}
+{{- if $public }}
+
+Open {{ $public }}
+{{- else }}
+
+No ingress or publicUrl is set. To try it locally:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "ap.fullname" . }}-frontend 8080:{{ .Values.frontend.service.port }}
+and open http://localhost:8080 (set publicUrl for SSO and CORS to work).
+{{- end }}
+
+Create the first administrator:
+  kubectl -n {{ .Release.Namespace }} exec deploy/{{ include "ap.fullname" . }}-backend -- \
+    python -m app.cli create-superuser --email you@example.com
+
+Check the installation:
+  helm test {{ .Release.Name }} -n {{ .Release.Namespace }}

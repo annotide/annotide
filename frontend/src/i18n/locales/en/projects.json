@@ -1,0 +1,521 @@
+{
+  "errors": {
+    "unknown": "Unknown error",
+    "missingProjectId": "Missing project id"
+  },
+  "nav": {
+    "annotate": "Start annotating",
+    "review": "Start reviewing",
+    "dashboard": "Dashboard",
+    "settings": "Settings"
+  },
+  "status": {
+    "all": "All statuses",
+    "new": "New",
+    "prelabeled": "Prelabeled",
+    "annotating": "Annotating",
+    "submitted": "Submitted",
+    "in_review": "In review",
+    "approved": "Approved",
+    "rejected": "Rejected",
+    "skipped": "Skipped"
+  },
+  "list": {
+    "heading": "Projects",
+    "newProject": "New project",
+    "form": {
+      "ariaLabel": "New project",
+      "name": "Name",
+      "description": "Description",
+      "create": "Create project",
+      "creating": "Creating…"
+    },
+    "loading": "Loading projects…",
+    "loadError": "Could not load projects",
+    "empty": {
+      "title": "No projects yet",
+      "message": "Create one with the button above, or ask a project owner to add you. You see only the projects you are a member of."
+    }
+  },
+  "detail": {
+    "loading": "Loading project…",
+    "loadError": "Could not load project",
+    "tabs": {
+      "label": "Project sections",
+      "items": "Items",
+      "data": "Add data",
+      "exports": "Exports",
+      "tasks": "Tasks & quality",
+      "prelabel": "Pre-label"
+    },
+    "exports": {
+      "heading": "Exports",
+      "format": "Format",
+      "export": "Export",
+      "exporting": "Exporting…",
+      "exportFailed": "Export failed",
+      "loading": "Loading exports…",
+      "loadError": "Could not load exports",
+      "empty": "No exports yet.",
+      "download": "Download"
+    },
+    "prelabel": {
+      "heading": "Pre-label",
+      "noModels": "No models registered.",
+      "model": "Model",
+      "version": "Version",
+      "limit": "Limit (dry run)",
+      "minConfidence": "Min confidence",
+      "queueUncertainTitle": "Sets each item's queue priority from how unsure the model was (ML-6)",
+      "queueUncertain": "Queue uncertain first",
+      "submit": "Pre-label",
+      "submitting": "Pre-labelling…",
+      "failed": "Pre-label failed",
+      "loading": "Loading pre-label jobs…",
+      "loadError": "Could not load pre-label jobs",
+      "empty": "No pre-label jobs yet.",
+      "summary": "{{predicted}}/{{selected}} predicted, {{empty}} empty, {{skippedHuman}} skipped (human), {{errors}} errors"
+    },
+    "tagFilter": "Filter by tag",
+    "statusFilter": "Status",
+    "selectAllLabel": "Select all loaded items",
+    "selectAll": "Select all",
+    "thumbnails": {
+      "queued": "Thumbnail job queued",
+      "error": "Could not queue thumbnails",
+      "generate": "Generate thumbnails",
+      "queuing": "Queuing…"
+    },
+    "items": {
+      "loading": "Loading items…",
+      "loadError": "Could not load items",
+      "emptyTitle": "No items",
+      "emptyMessage": "No items match the current filter.",
+      "noneTitle": "No items yet",
+      "noneMessage": "Upload files, or scan the files already in the project's source storage, under Add data.",
+      "addData": "Add data",
+      "selectItem": "Select {{path}}",
+      "noPreview": "No preview",
+      "tagsLabel": "Tags",
+      "loadMore": "Load more",
+      "mediaKind": {
+        "pdf": "PDF document",
+          "llm": "LLM evaluation",
+          "timeseries": "Time series",
+        "text": "Text document",
+        "video": "Video",
+        "audio": "Audio",
+        "image": "Image"
+      }
+    }
+  },
+  "dashboard": {
+    "projectFallback": "Project",
+    "heading": "Dashboard",
+    "throughputWindow": "Throughput window",
+    "daysOption": "{{count}} days",
+    "loading": "Loading dashboard…",
+    "loadError": "Could not load dashboard",
+    "empty": {
+      "title": "No items yet",
+      "message": "Scan the project's source connector and the numbers will appear here."
+    },
+    "summaryHeading": "Summary",
+    "tiles": {
+      "progress": "Progress",
+      "progressDetail": "{{approved}} of {{total}} items approved",
+      "annotationQueue": "Annotation queue",
+      "reviewQueue": "Review queue",
+      "inProgress": "{{count}} in progress",
+      "rejectionRate": "Rejection rate",
+      "rejectionDetail": "{{rejected}} rejected, {{approved}} approved"
+    },
+    "cards": {
+      "itemsByStatus": "Items by status",
+      "throughputTitle": "Throughput",
+      "throughputSubtitle": "Annotation versions per day, by their current status",
+      "classBalanceTitle": "Class balance",
+      "classBalanceSubtitle": "Latest non-draft version of every item",
+      "annotators": "Annotators",
+      "tasks": "Tasks",
+      "annotationVersions": "Annotation versions"
+    },
+    "noAnnotations": "No submitted annotations yet.",
+    "table": {
+      "annotator": "Annotator",
+      "submitted": "Submitted",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "type": "Type"
+    },
+    "versions": {
+      "total": "Total versions",
+      "byHumans": "By humans",
+      "byModels": "By models",
+      "latest": {
+        "draft": "Latest draft",
+        "submitted": "Latest submitted",
+        "approved": "Latest approved",
+        "rejected": "Latest rejected"
+      }
+    },
+    "throughput": {
+      "ariaLabel": "Versions per day",
+      "dayVersions": "{{day}}: {{count}} versions",
+      "dayTitle": "{{day}}: {{submitted}} submitted, {{approved}} approved, {{rejected}} rejected",
+      "totalDays": "{{total}} versions in {{days}} days"
+    },
+    "legend": {
+      "submitted": "Submitted",
+      "approved": "Approved",
+      "rejected": "Rejected"
+    },
+    "classBalanceAriaLabel": "Label counts",
+    "taskColumns": {
+      "open": "Open",
+      "in_progress": "In progress",
+      "done": "Done",
+      "cancelled": "Cancelled"
+    },
+    "taskRows": {
+      "annotate": "Annotate",
+      "review": "Review"
+    }
+  },
+  "tasks": {
+    "heading": "Queue",
+    "description": "Open and in-progress tasks in the order they are handed out: highest priority first, then the earliest deadline, then the oldest.",
+    "truncated": " Showing the first {{limit}} of each status.",
+    "loading": "Loading tasks…",
+    "loadError": "Could not load tasks",
+    "loadErrorMessage": "The task list could not be loaded.",
+    "empty": {
+      "title": "Queue is empty",
+      "message": "No open or in-progress tasks."
+    },
+    "columns": {
+      "item": "Item",
+      "type": "Type",
+      "status": "Status",
+      "assignee": "Assignee",
+      "priority": "Priority",
+      "deadline": "Deadline"
+    },
+    "inProgress": "in progress",
+    "anyone": "Anyone",
+    "assigneeLabel": "Assignee for {{item}}",
+    "priorityLabel": "Priority for {{item}}",
+    "deadlineLabel": "Deadline for {{item}}",
+    "clearDeadlineLabel": "Clear deadline for {{item}}",
+    "clear": "Clear",
+    "overdue": "overdue",
+    "updateFailed": "Could not update the task."
+  },
+  "bulk": {
+    "ariaLabel": "Bulk actions",
+    "selectedCount": "{{count}} selected",
+    "action": "Action",
+    "actions": {
+      "assign": "Assign / prioritise",
+      "return": "Return to queue",
+      "approve": "Approve",
+      "reject": "Reject",
+      "tag": "Tag"
+    },
+    "task": "Task",
+    "taskTypeLabel": "Task type",
+    "reviewCommentLabel": "Review comment",
+    "assignee": "Assignee",
+    "keepCurrent": "Keep current",
+    "unassign": "Anyone (unassign)",
+    "priority": "Priority",
+    "deadline": "Deadline",
+    "comment": "Comment (optional)",
+    "rejectComment": "Reason (sent to each annotator)",
+    "addTags": "Add tags",
+    "removeTags": "Remove tags",
+    "apply": "Apply",
+    "applying": "Applying…",
+    "clearSelection": "Clear selection",
+    "tagError": "Enter at least one tag to add or remove.",
+    "rejectCommentError": "A rejection needs a reason.",
+    "priorityError": "Priority must be a number.",
+    "genericError": "Bulk action failed.",
+    "applied_one": "Applied to {{count}} item",
+    "applied_other": "Applied to {{count}} items",
+    "skippedSuffix": ", skipped {{count}}.",
+    "showReasons": "Show reasons",
+    "hideReasons": "Hide reasons",
+    "actionAria": "Bulk action",
+    "addTagsAria": "Tags to add",
+    "removeTagsAria": "Tags to remove"
+  },
+  "quality": {
+    "heading": "Quality",
+    "agreement": {
+      "title": "Agreement",
+      "loadError": "Could not load agreement",
+      "loading": "Loading…",
+      "none": "No item has two or more consensus versions yet. Set “Annotators per item” in the project settings to collect them.",
+      "summary": "{{items}} items · shape F1 {{shapeF1}} · mean IoU {{meanIou}}",
+      "spanSummary": " · span F1 {{exact}} exact / {{overlap}} overlap",
+      "envelopeNote": "* polygons and rotated boxes compared by their bounding boxes",
+      "fields": {
+        "field": "Field",
+        "items": "Items",
+        "fleiss": "Fleiss κ",
+        "krippendorff": "Krippendorff α"
+      },
+      "pairs": {
+        "pair": "Pair",
+        "items": "Items",
+        "cohen": "Cohen κ",
+        "shapeF1": "Shape F1",
+        "spanF1": "Span F1"
+      }
+    },
+    "accuracy": {
+      "title": "Annotator accuracy (gold)",
+      "openGoldTasksTitle": "Give every annotator a task on every gold item they have not done yet",
+      "openGoldTasks": "Open gold tasks",
+      "opened_one": "Opened {{count}} gold task",
+      "opened_other": "Opened {{count}} gold tasks",
+      "alreadyExisted": ", {{count}} already existed",
+      "openError": "Could not open gold tasks",
+      "loadError": "Could not load annotator accuracy",
+      "loading": "Loading…",
+      "none": "No gold results yet. Mark approved items as gold references on the review page, then open gold tasks.",
+      "columns": {
+        "annotator": "Annotator",
+        "goldItems": "Gold items",
+        "classification": "Classification",
+        "shapeF1": "Shape F1",
+        "spanF1": "Span F1",
+        "score": "Score"
+      }
+    }
+  },
+  "consensus": {
+    "heading": "Consensus ({{count}}/{{expected}})",
+    "shapeF1": "Shape F1",
+    "meanIou": "Mean IoU",
+    "spanF1": "Span F1 exact / overlap",
+    "envelopeNote": "* polygons and rotated boxes compared by their bounding boxes",
+    "fusedPreview": "Fused preview",
+    "show": "Show",
+    "approveVersion": "Approve this version",
+    "conflicts": "Not enough agreement to fuse:",
+    "comment": "Comment",
+    "resolveError": "Could not resolve the consensus",
+    "fuseAndApprove": "Fuse and approve"
+  },
+  "gold": {
+    "heading": "Gold reference",
+    "explainSet": "This item scores annotators: its gold tasks are compared with this reference.",
+    "explainUnset": "Use the approved version as a reference to score annotators against.",
+    "changeError": "Could not change the gold reference",
+    "remove": "Remove gold reference",
+    "use": "Use as gold reference"
+  },
+  "scan": {
+    "heading": "Scan source storage",
+    "hint": "Registers files already in the project's source storage as items. Uploads scan on their own.",
+    "button": "Scan now",
+    "scanning": "Scanning…",
+    "queued": "Scan queued…",
+    "done_one": "Scan finished: {{count}} new item.",
+    "done_other": "Scan finished: {{count}} new items.",
+    "failed": "The scan failed.",
+    "noSource": "This project has no source connector yet.",
+    "openSettings": "Choose one in Settings"
+  },
+  "upload": {
+    "heading": "Upload",
+    "dropZoneLabel": "Drop files or folders here",
+    "dropHint": "Drop images or folders here, or choose them below. Files go straight to the project's source storage; a scan registers them afterwards.",
+    "filesLabel": "Files",
+    "chooseFiles": "Choose files",
+    "folderLabel": "Folder",
+    "chooseFolder": "Choose a folder",
+    "uploading": "Uploading {{done}}/{{total}}…",
+    "uploadButton": "Upload {{count}}",
+    "uploadButtonEmpty": "Upload",
+    "clear": "Clear",
+    "selection_one": "{{count}} file",
+    "selection_other": "{{count}} files",
+    "selectionSize": " · {{size}} MiB",
+    "selectionPaths": ": {{paths}}",
+    "progressLabel": "Upload progress",
+    "uploadFailed": "Upload failed.",
+    "outcome": {
+      "uploaded": "{{count}} uploaded",
+      "failed": ", {{count}} failed",
+      "scanQueued": " · scan queued",
+      "scanDone": " · scan finished",
+      "scanFailed": " · scan failed",
+      "failedList": "Failed: {{list}}",
+      "failedMore": " and {{count}} more"
+    }
+  },
+  "import": {
+    "heading": "Imports",
+    "format": "Import format",
+    "file": "File",
+    "writeAs": "Write as",
+    "writeAsSubmitted": "Submitted",
+    "writeAsDraft": "Draft",
+    "dryRun": "Dry run",
+    "uploading": "Uploading…",
+    "preview": "Preview",
+    "submit": "Import",
+    "progressLabel": "Upload progress",
+    "chooseFile": "Choose a file to import.",
+    "invalidMapping": "Class mapping must be a JSON object like {\"source\": \"schema-class\"}.",
+    "classMapping": {
+      "legend": "Class mapping",
+      "fromDryRun": "(from the last dry run)",
+      "sameName": "(same name)",
+      "notInSchema": "not in schema — dropped",
+      "editAsJson": "Edit class mapping as JSON",
+      "optionalJson": "Class mapping (optional JSON — run a dry run to pick classes from a list)",
+      "jsonLabel": "Class mapping JSON"
+    },
+    "attributeMapping": {
+      "legend": "Attribute mapping",
+      "fromDryRun": "(from the last dry run)",
+      "sameName": "(same name)",
+      "discard": "Discard"
+    },
+    "loading": "Loading imports…",
+    "loadError": "Could not load imports",
+    "unknownError": "Unknown error",
+    "empty": "No imports yet.",
+    "summary": {
+      "dryRunPrefix": "Dry run: ",
+      "counts": "{{imported}} imported · {{matched}}/{{parsed}} matched",
+      "unmatchedCount": " · {{count}} unmatched",
+      "errors": " · {{count}} errors",
+      "droppedShapes": " · {{count}} shapes dropped",
+      "droppedAttributes": " · {{count}} attributes dropped",
+      "classes": "Classes: {{list}}",
+      "unmatchedSample": "Unmatched: {{list}}"
+    },
+    "uploadError": "Import failed",
+    "formatHints": {
+      "coco": "one .json",
+      "yolo": ".zip with data.yaml + labels/*.txt",
+      "voc": ".zip of per-image .xml",
+      "cvat": "one .xml",
+      "label_studio": "one .json export"
+    }
+  },
+  "snapshots": {
+    "heading": "Snapshots",
+    "intro": "A snapshot freezes the latest annotation of every matching item so an export or a training run can name exactly what it used.",
+    "form": {
+      "ariaLabel": "New snapshot",
+      "name": "Name",
+      "nameAria": "Snapshot name",
+      "itemStatus": "Item status (any if none)",
+      "itemStatusAria": "Item status filter",
+      "pathPrefix": "Path prefix",
+      "pathPrefixAria": "Path prefix",
+      "splitCheckboxAria": "Split into train / val / test",
+      "splitLabel": "Split train / val / test",
+      "trainLabel": "Train",
+      "valLabel": "Val",
+      "testLabel": "Test",
+      "ratioAria": "{{label}} ratio",
+      "seedLabel": "Seed",
+      "seedAria": "Split seed",
+      "groupByLabel": "Keep together",
+      "groupByAria": "Group by",
+      "groupByNone": "Each item on its own",
+      "groupByFolder": "Items in the same folder",
+      "groupByMeta": "Items sharing a meta key",
+      "metaKeyLabel": "Meta key",
+      "metaKeyAria": "Meta key",
+      "queuing": "Queuing…",
+      "create": "Create snapshot",
+      "errors": {
+        "nameRequired": "Give the snapshot a name.",
+        "ratiosNotNumbers": "Split ratios must be numbers.",
+        "ratiosZero": "Split ratios must add up to more than zero.",
+        "seedInteger": "Seed must be an integer.",
+        "metaKeyRequired": "Name the meta key to group by.",
+        "createFailed": "Could not queue the snapshot."
+      }
+    },
+    "jobs": {
+      "ariaLabel": "Snapshot jobs",
+      "defaultName": "snapshot"
+    },
+    "loading": "Loading snapshots…",
+    "loadError": "Could not load snapshots",
+    "unknownError": "Unknown error",
+    "empty": "No snapshots yet.",
+    "exportFormat": "Export format",
+    "exportFailed": "Export failed",
+    "exportQueued": "Export queued — see Exports above.",
+    "retrainFailed": "Retrain request failed",
+    "retrainNoWebhook": "No webhook subscribes to retrain.requested — add one under Webhooks to train on {{name}}.",
+    "retrainRequested_one": "Retrain requested for {{name}} — sent to {{count}} webhook.",
+    "retrainRequested_other": "Retrain requested for {{name}} — sent to {{count}} webhooks.",
+    "table": {
+      "name": "Name",
+      "created": "Created",
+      "items": "Items",
+      "split": "Split",
+      "digest": "Digest",
+      "export": "Export",
+      "compare": "Compare",
+      "lineage": "Lineage"
+    },
+    "row": {
+      "splitToExportAria": "Split to export for {{name}}",
+      "allSplits": "all splits",
+      "export": "Export",
+      "retrain": "Retrain",
+      "retrainTitle": "Emit retrain.requested to the project's webhooks with this snapshot",
+      "compareFromAria": "Compare from {{name}}",
+      "compareToAria": "Compare to {{name}}",
+      "from": "from",
+      "to": "to",
+      "lineageAria": "Lineage of {{name}}",
+      "hide": "Hide",
+      "show": "Show",
+      "publish": "MLflow",
+      "publishAria": "Publish {{name}} to {{platform}}"
+    },
+    "compare": {
+      "pickDifferent": "Pick two different snapshots to compare.",
+      "comparing": "Comparing…",
+      "compareError": "Could not compare the snapshots.",
+      "regionAria": "Snapshot comparison",
+      "summary": "{{added}} added, {{removed}} removed, {{changed}} changed, {{unchanged}} unchanged",
+      "splitMoved": ", {{count}} moved between splits",
+      "truncated": " (lists truncated)",
+      "classHeading": "Class",
+      "delta": "Δ",
+      "changedItems": "Changed items ({{count}})"
+    },
+    "lineage": {
+      "loading": "Loading lineage…",
+      "loadError": "Could not load lineage",
+      "tryAgain": "Try again.",
+      "none": "No model version records {{name}} as its training data yet. A version claims it by registering with this snapshot's id or digest.",
+      "run": "run",
+      "noItemsPredicted": "no items predicted here",
+      "itemsPredicted_one": "predicted {{count}} item here",
+      "itemsPredicted_other": "predicted {{count}} items here",
+      "digestDiffers": "digest differs"
+    },
+    "mlPlatform": "ML platform",
+    "mlPlatformNone": "None",
+    "publishFailed": "Publishing to the ML platform failed",
+    "published": "Published {{name}} to {{experiment}}.",
+    "alreadyPublished": "{{name}} was already in {{experiment}}.",
+    "openRun": "Open run",
+    "retrainJobStarted": "Retrain job started for {{name}} (run {{run}})."
+  }
+}

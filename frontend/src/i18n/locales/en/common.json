@@ -1,0 +1,22 @@
+{
+  "loading": "Loading…",
+  "somethingWentWrong": "Something went wrong",
+  "tryAgain": "Try again",
+  "save": "Save",
+  "saving": "Saving…",
+  "cancel": "Cancel",
+  "delete": "Delete",
+  "close": "Close",
+  "edit": "Edit",
+  "create": "Create",
+  "remove": "Remove",
+  "yes": "Yes",
+  "no": "No",
+  "never": "never",
+  "none": "None",
+  "job": {
+    "retry": "Retry",
+    "retrying": "Retrying…",
+    "retryFailed": "Could not retry the job"
+  }
+}

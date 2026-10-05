@@ -1,0 +1,113 @@
+{{- /*
+Alert rules (OPS-4). Metric names are the OpenTelemetry instruments of
+backend/app/core/observability.py after Prometheus name translation.
+*/}}
+{{- if .Values.alerts.enabled }}
+{{- $api := .Values.alerts.apiSelector }}
+{{- $worker := .Values.alerts.workerSelector }}
+{{- $t := .Values.alerts.thresholds }}
+{{- $jobs := "scan_source|tile_image|prelabel|export|snapshot|import|thumbnail|rebuild_cache" }}
+{{- $crons := "publish_outbox_events|reap_expired_task_locks|deliver_webhooks|licence_calls|requeue_stranded_jobs|record_backlog" }}
+{{- $extra := .Values.alerts.extraAlertLabels }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "ap.fullname" . }}
+  labels:
+    {{- include "ap.labels" (dict "ctx" . "component" "alerts") | nindent 4 }}
+    {{- with .Values.alerts.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: annotide.api
+      rules:
+        - alert: AnnotationApiErrorRate
+          expr: |
+            sum(rate(http_server_request_duration_seconds_count{ {{- $api }}, http_response_status_code=~"5.."}[5m]))
+              / sum(rate(http_server_request_duration_seconds_count{ {{- $api }}}[5m]))
+              > {{ $t.apiErrorRatio }}
+          for: 10m
+          labels:
+            severity: critical
+            {{- with $extra }}{{ toYaml . | nindent 12 }}{{ end }}
+          annotations:
+            summary: More than {{ mulf $t.apiErrorRatio 100 | printf "%.0f" }}% of API requests fail with a 5xx
+            description: "{{ "{{" }} $value | humanizePercentage {{ "}}" }} of requests answered 5xx over 5 minutes. Check the API logs (trace ids are in every line) and /api/v1/ready."
+        - alert: AnnotationApiSlow
+          expr: |
+            histogram_quantile(0.95,
+              sum by (le) (rate(http_server_request_duration_seconds_bucket{ {{- $api }}}[5m]))
+            ) > {{ $t.apiLatencyP95Seconds }}
+          for: 15m
+          labels:
+            severity: warning
+            {{- with $extra }}{{ toYaml . | nindent 12 }}{{ end }}
+          annotations:
+            summary: API p95 latency above {{ $t.apiLatencyP95Seconds }} s
+            description: "p95 is {{ "{{" }} $value | humanizeDuration {{ "}}" }}. Usual causes: database load, a slow secret store or storage account, CPU limits."
+    - name: annotide.worker
+      rules:
+        - alert: AnnotationNoWorker
+          # Every worker replica reports the backlog gauges each minute; none
+          # at all means no worker is running (or metrics stopped flowing).
+          expr: absent(annotation_jobs_queued{ {{- $worker }}})
+          for: 10m
+          labels:
+            severity: critical
+            {{- with $extra }}{{ toYaml . | nindent 12 }}{{ end }}
+          annotations:
+            summary: No annotation worker is reporting
+            description: "No backlog gauge for 10 minutes: jobs, outbox publishing, webhooks and lock reaping have stopped, or the collector lost the worker's metrics."
+        - alert: AnnotationQueueStalled
+          expr: max(annotation_jobs_queued_oldest_age_seconds{ {{- $worker }}}) > {{ $t.queueWaitSeconds }}
+          for: 5m
+          labels:
+            severity: critical
+            {{- with $extra }}{{ toYaml . | nindent 12 }}{{ end }}
+          annotations:
+            summary: Jobs have waited more than {{ $t.queueWaitSeconds }} s for a worker
+            description: "The oldest queued job has waited {{ "{{" }} $value | humanizeDuration {{ "}}" }}. Workers are saturated (see worker.autoscaling) or not taking jobs from Redis."
+        - alert: AnnotationJobFailureRate
+          expr: |
+            sum(rate(annotation_worker_job_duration_seconds_count{ {{- $worker }}, job_name=~"{{ $jobs }}", outcome="error"}[15m]))
+              / sum(rate(annotation_worker_job_duration_seconds_count{ {{- $worker }}, job_name=~"{{ $jobs }}"}[15m]))
+              > {{ $t.jobFailureRatio }}
+          for: 15m
+          labels:
+            severity: warning
+            {{- with $extra }}{{ toYaml . | nindent 12 }}{{ end }}
+          annotations:
+            summary: More than {{ mulf $t.jobFailureRatio 100 | printf "%.0f" }}% of jobs fail
+            description: "{{ "{{" }} $value | humanizePercentage {{ "}}" }} of job runs ended in an error over 15 minutes. The failed jobs' `error` column says why; they can be retried from the UI."
+        - alert: AnnotationCronFailing
+          expr: |
+            sum by (job_name) (increase(annotation_worker_job_duration_seconds_count{ {{- $worker }}, job_name=~"{{ $crons }}", outcome="error"}[15m])) > 2
+          for: 15m
+          labels:
+            severity: warning
+            {{- with $extra }}{{ toYaml . | nindent 12 }}{{ end }}
+          annotations:
+            summary: "Worker cron {{ "{{" }} $labels.job_name {{ "}}" }} keeps failing"
+            description: "{{ "{{" }} $labels.job_name {{ "}}" }} failed {{ "{{" }} $value {{ "}}" }} times in 15 minutes."
+    - name: annotide.outbox
+      rules:
+        - alert: AnnotationOutboxLagging
+          expr: max(annotation_outbox_pending_oldest_age_seconds{ {{- $worker }}}) > {{ $t.outboxAgeSeconds }}
+          for: 10m
+          labels:
+            severity: warning
+            {{- with $extra }}{{ toYaml . | nindent 12 }}{{ end }}
+          annotations:
+            summary: Annotations are not reaching the result storage
+            description: "The oldest unpublished outbox event is {{ "{{" }} $value | humanizeDuration {{ "}}" }} old. Check the result connector (POST /connectors/{id}/check) and its credentials."
+        - alert: AnnotationOutboxDead
+          expr: max(annotation_outbox_dead{ {{- $worker }}}) > 0
+          for: 5m
+          labels:
+            severity: warning
+            {{- with $extra }}{{ toYaml . | nindent 12 }}{{ end }}
+          annotations:
+            summary: Outbox events were given up
+            description: "{{ "{{" }} $value {{ "}}" }} events reached APP_OUTBOX_MAX_ATTEMPTS and will not be published without intervention."
+{{- end }}

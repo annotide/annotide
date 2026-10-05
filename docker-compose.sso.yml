@@ -1,0 +1,64 @@
+# Dev-only Keycloak for trying single sign-on and IdP group sync (AUTH-1,
+# AUTH-3) against a real provider. Not part of `make dev`:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.sso.yml up -d --wait keycloak backend worker
+#
+# The realm (infra/keycloak/annotation-realm.json) has groups `annotators`,
+# `reviewers`, `platform-admins` and users alice / carol; passwords and the
+# client secret are dev values only. Keycloak admin console:
+# http://localhost:8180 (admin / admin).
+#
+# One issuer, two networks: the browser reaches Keycloak on localhost:8180,
+# the backend container on keycloak:8080. KC_HOSTNAME pins the public URL, so
+# tokens carry `iss=http://localhost:8180/realms/annotation` and the login
+# page is on localhost; KC_HOSTNAME_BACKCHANNEL_DYNAMIC lets the backend's
+# discovery, token and JWKS calls go to keycloak:8080. The backend validates
+# `iss` against the discovery document, which reports the public URL.
+#
+# The callback defaults to the Playwright dev server (:5174, see
+# frontend/e2e/sso.spec.ts); set SSO_FRONTEND_URL=http://localhost:5173 to
+# sign in through the compose frontend instead.
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.1
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HOSTNAME: http://localhost:${KEYCLOAK_HOST_PORT:-8180}
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "127.0.0.1:${KEYCLOAK_HOST_PORT:-8180}:8080"
+    volumes:
+      - ./infra/keycloak:/opt/keycloak/data/import:ro
+    networks:
+      - annotation-net
+    healthcheck:
+      # The image has no curl; bash's /dev/tcp is enough for the health port.
+      test:
+        - CMD-SHELL
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /health/ready HTTP/1.0\r\n\r\n' >&3 &&
+          grep -q '"UP"' <&3
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 20s
+
+  backend: &sso-app
+    environment:
+      APP_FRONTEND_URL: ${SSO_FRONTEND_URL:-http://localhost:5174}
+      APP_OIDC_ISSUER: http://keycloak:8080/realms/annotation
+      APP_OIDC_CLIENT_ID: annotide
+      APP_OIDC_CLIENT_SECRET: dev-sso-secret
+      APP_OIDC_REDIRECT_URI: ${SSO_FRONTEND_URL:-http://localhost:5174}/api/v1/auth/oidc/callback
+      APP_OIDC_DISPLAY_NAME: Keycloak
+      APP_OIDC_ORGANIZATION_SLUG: ${APP_OIDC_ORGANIZATION_SLUG:-default}
+      APP_OIDC_GROUPS_CLAIM: groups
+      APP_OIDC_ADMIN_GROUPS: platform-admins
+
+  worker: *sso-app

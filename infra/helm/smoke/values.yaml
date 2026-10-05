@@ -1,0 +1,20 @@
+# Values for the k3s smoke test: local images, in-cluster throwaway DB/Redis.
+image:
+  pullPolicy: Never
+  backend: { repository: annotide-backend, tag: local }
+  frontend: { repository: annotide-frontend, tag: local }
+  model: { repository: annotide-model, tag: local }
+publicUrl: http://annotate.localtest:18090
+database:
+  url: postgresql+asyncpg://annotation:k3s-test-pw@postgres:5432/annotation
+redis:
+  url: redis://redis:6379/0
+secrets:
+  secretKey: k3s-throwaway-secret-key-0123456789abcdef0123
+model:
+  enabled: true
+ingress:
+  enabled: true
+  className: traefik
+  hosts:
+    - host: annotate.localtest

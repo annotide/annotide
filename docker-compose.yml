@@ -1,0 +1,382 @@
+# docker-compose.yml — local development stack for the annotation platform.
+#
+# Ports and env var names match docs/CONTRACTS.md exactly. No secrets live
+# here: every value is `${VAR:-default}` interpolation, sourced from a
+# local .env (see .env.example) that is never committed.
+#
+#   cp .env.example .env && make dev
+
+networks:
+  annotation-net:
+    name: annotation-net
+
+volumes:
+  azurite_data:
+    name: annotation-azurite-data
+  postgres_data:
+    name: annotation-postgres-data
+  mlflow_data:
+    name: annotation-mlflow-data
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-annotation}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-annotation_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-annotation}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/compose/postgres-init.sql:/docker-entrypoint-initdb.d/10-postgres-init.sql:ro
+    ports:
+      # Bound to loopback: the app reaches postgres over the compose network,
+      # so this is only for a local client. Never publish a database on 0.0.0.0.
+      # Host port defaults off 5432 to avoid colliding with a local install.
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-annotation} -d ${POSTGRES_DB:-annotation}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    networks:
+      - annotation-net
+
+  # Azure Blob Storage emulator, so the whole source -> annotate -> export
+  # loop runs locally with no cloud account. It speaks the real Blob API, so
+  # the same azure_blob connector code path is exercised as in production.
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    command: >
+      azurite-blob --blobHost 0.0.0.0 --blobPort 10000
+      --location /data --skipApiVersionCheck --loose
+    volumes:
+      - azurite_data:/data
+    ports:
+      # Published because the BROWSER fetches media straight from storage via
+      # signed URLs (ARC-3): it must reach this host, not just the API.
+      - "127.0.0.1:${AZURITE_HOST_PORT:-10000}:10000"
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 10000 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+    networks:
+      - annotation-net
+
+  # Local stand-ins for the other clouds, only with `--profile emulators`:
+  # `make emulators`. Azurite above covers Azure; these cover AWS (S3 and
+  # Secrets Manager, both served by Moto) and Google Cloud Storage, plus a
+  # webhook receiver that echoes and logs every delivery. `make seed-emulators`
+  # wires a demo project to each bucket; `make integration` runs the connector
+  # tests against all of them. Published on the host because the browser
+  # fetches media straight from storage (ARC-3).
+  s3:
+    image: motoserver/moto:5.2.3
+    profiles: ["emulators"]
+    ports:
+      - "127.0.0.1:${S3_EMULATOR_HOST_PORT:-9100}:5000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:5000/moto-api/')"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - annotation-net
+
+  gcs:
+    image: fsouza/fake-gcs-server:1.52
+    profiles: ["emulators"]
+    # The URLs it hands out (resumable uploads) must work from the browser.
+    command: >
+      -scheme http -port 4443 -backend memory
+      -public-host localhost:${GCS_EMULATOR_HOST_PORT:-4443}
+      -external-url http://localhost:${GCS_EMULATOR_HOST_PORT:-4443}
+    ports:
+      - "127.0.0.1:${GCS_EMULATOR_HOST_PORT:-4443}:4443"
+    networks:
+      - annotation-net
+
+  webhook-sink:
+    image: mendhak/http-https-echo:37
+    profiles: ["emulators"]
+    environment:
+      HTTP_PORT: "8080"
+    ports:
+      - "127.0.0.1:${WEBHOOK_SINK_HOST_PORT:-8099}:8080"
+    networks:
+      - annotation-net
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:${REDIS_HOST_PORT:-6380}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    networks:
+      - annotation-net
+
+  backend:
+    build:
+      context: ./backend
+      args:
+        # `otel` bakes in OpenTelemetry (OPS-3); empty keeps the image lean.
+        EXTRAS: ${BACKEND_EXTRAS:-}
+    image: annotide-backend:local
+    # Migrations run once, synchronously, before the API starts serving.
+    # Keep-alive 75 s, as in the image (backend/Dockerfile).
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --timeout-keep-alive 75"
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      APP_DATABASE_URL: ${APP_DATABASE_URL:-postgresql+asyncpg://annotation:annotation_dev_password@postgres:5432/annotation}
+      APP_REDIS_URL: ${APP_REDIS_URL:-redis://redis:6379/0}
+      APP_DATABASE_AUTH: ${APP_DATABASE_AUTH:-password}
+      APP_REDIS_AUTH: ${APP_REDIS_AUTH:-password}
+      APP_MANAGED_IDENTITY_CLIENT_ID: ${APP_MANAGED_IDENTITY_CLIENT_ID:-}
+      APP_SECRET_KEY: ${APP_SECRET_KEY:-dev-only-insecure-secret-key-change-me}
+      APP_SECRET_KEY_PREVIOUS: ${APP_SECRET_KEY_PREVIOUS:-}
+      APP_ACCESS_TOKEN_TTL: ${APP_ACCESS_TOKEN_TTL:-3600}
+      APP_MFA_REQUIRED_FOR_ADMINS: ${APP_MFA_REQUIRED_FOR_ADMINS:-false}
+      APP_SIGNED_URL_TTL: ${APP_SIGNED_URL_TTL:-900}
+      APP_MODEL_DELETE_MODE: ${APP_MODEL_DELETE_MODE:-soft}
+      # How the model service reaches the API (local-connector media URLs).
+      APP_INTERNAL_API_URL: ${APP_INTERNAL_API_URL:-http://backend:8000}
+      APP_THUMBNAIL_SIZE: ${APP_THUMBNAIL_SIZE:-256}
+      APP_THUMBNAIL_MAX_SOURCE_BYTES: ${APP_THUMBNAIL_MAX_SOURCE_BYTES:-67108864}
+      APP_TILE_MIN_PIXELS: ${APP_TILE_MIN_PIXELS:-25000000}
+      APP_TILE_MAX_SOURCE_BYTES: ${APP_TILE_MAX_SOURCE_BYTES:-12884901888}
+      APP_TILE_WORK_DIR: ${APP_TILE_WORK_DIR:-}
+      APP_TASK_LOCK_TTL: ${APP_TASK_LOCK_TTL:-1800}
+      # Outbound webhooks (API-4)
+      APP_WEBHOOK_MAX_ATTEMPTS: ${APP_WEBHOOK_MAX_ATTEMPTS:-8}
+      APP_WEBHOOK_TIMEOUT: ${APP_WEBHOOK_TIMEOUT:-10}
+      APP_WEBHOOK_POLL_BATCH_SIZE: ${APP_WEBHOOK_POLL_BATCH_SIZE:-50}
+      APP_WEBHOOK_MAX_PER_MINUTE: ${APP_WEBHOOK_MAX_PER_MINUTE:-60}
+      # Dev only: the compose echo receiver is a private address (SEC-4).
+      APP_WEBHOOK_ALLOW_PRIVATE_URLS: ${APP_WEBHOOK_ALLOW_PRIVATE_URLS:-true}
+      # Notification e-mail (API-7); `mailpit` / port 1025 with `make emulators`.
+      APP_SMTP_HOST: ${APP_SMTP_HOST:-}
+      APP_SMTP_PORT: ${APP_SMTP_PORT:-587}
+      APP_SMTP_SECURITY: ${APP_SMTP_SECURITY:-starttls}
+      APP_SMTP_USERNAME: ${APP_SMTP_USERNAME:-}
+      APP_SMTP_PASSWORD: ${APP_SMTP_PASSWORD:-}
+      APP_SMTP_FROM: ${APP_SMTP_FROM:-Annotide <noreply@localhost>}
+      # Licensing (LIC-6, LIC-27): no server URL = nothing is ever sent.
+      APP_LICENSE_KEY: ${APP_LICENSE_KEY:-}
+      APP_INSTALL_ID: ${APP_INSTALL_ID:-}
+      APP_LICENSE_SERVER_URL: ${APP_LICENSE_SERVER_URL:-}
+      APP_LICENSE_REFRESH_ENABLED: ${APP_LICENSE_REFRESH_ENABLED:-true}
+      APP_TELEMETRY_ENABLED: ${APP_TELEMETRY_ENABLED:-true}
+      # Dev-stack limits: generous, so E2E reruns and repeated logins pass.
+      # Production defaults (config.py): 1200 / 1200 / 10 per minute.
+      APP_RATE_LIMIT_ENABLED: ${APP_RATE_LIMIT_ENABLED:-true}
+      APP_RATE_LIMIT_PER_MINUTE: ${APP_RATE_LIMIT_PER_MINUTE:-6000}
+      APP_RATE_LIMIT_API_KEY_PER_MINUTE: ${APP_RATE_LIMIT_API_KEY_PER_MINUTE:-6000}
+      APP_RATE_LIMIT_LOGIN_PER_MINUTE: ${APP_RATE_LIMIT_LOGIN_PER_MINUTE:-100}
+      APP_CORS_ORIGINS: ${APP_CORS_ORIGINS:-http://localhost:5173}
+      # Reverse proxies whose X-Forwarded-* headers are trusted (SEC-3); unset = none.
+      APP_TRUSTED_PROXIES: ${APP_TRUSTED_PROXIES:-}
+      APP_LOG_LEVEL: ${APP_LOG_LEVEL:-INFO}
+      APP_LOG_FORMAT: ${APP_LOG_FORMAT:-json}
+      APP_OTEL_ENABLED: ${APP_OTEL_ENABLED:-false}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
+      APP_FRONTEND_URL: ${APP_FRONTEND_URL:-http://localhost:5173}
+      # Single sign-on (AUTH-1): unset issuer = local accounts only.
+      APP_OIDC_ISSUER: ${APP_OIDC_ISSUER:-}
+      APP_OIDC_CLIENT_ID: ${APP_OIDC_CLIENT_ID:-}
+      APP_OIDC_CLIENT_SECRET: ${APP_OIDC_CLIENT_SECRET:-}
+      APP_OIDC_REDIRECT_URI: ${APP_OIDC_REDIRECT_URI:-http://localhost:8000/api/v1/auth/oidc/callback}
+      APP_OIDC_SCOPES: ${APP_OIDC_SCOPES:-openid profile email}
+      APP_OIDC_DISPLAY_NAME: ${APP_OIDC_DISPLAY_NAME:-Single sign-on}
+      APP_OIDC_ORGANIZATION_SLUG: ${APP_OIDC_ORGANIZATION_SLUG:-}
+      APP_OIDC_AUTO_PROVISION: ${APP_OIDC_AUTO_PROVISION:-true}
+      APP_OIDC_TRUST_UNVERIFIED_EMAIL: ${APP_OIDC_TRUST_UNVERIFIED_EMAIL:-false}
+      APP_OIDC_GROUPS_CLAIM: ${APP_OIDC_GROUPS_CLAIM:-groups}
+      APP_OIDC_ADMIN_GROUPS: ${APP_OIDC_ADMIN_GROUPS:-}
+      AZURITE_ACCOUNT_KEY: ${AZURITE_ACCOUNT_KEY:-Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==}
+      # Moto's accept-anything key pair for the S3 emulator (make seed-emulators).
+      EMULATOR_S3_CREDENTIALS: '{"access_key_id": "test", "secret_access_key": "test"}'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      azurite:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${BACKEND_HOST_PORT:-8000}:8000"
+    networks:
+      - annotation-net
+
+  # Same image and code as the API, different process: the worker imports the
+  # backend's services, connectors and exporters directly (see
+  # backend/app/worker/). Build once, run twice.
+  worker:
+    image: annotide-backend:local
+    command: arq app.worker.main.WorkerSettings
+    # Longer than SHUTDOWN_JOB_WAIT_SECONDS, so a running job can finish or
+    # go back to the queue before the container is killed.
+    stop_grace_period: 60s
+    # The image's HEALTHCHECK probes the API on :8000, which this process
+    # never serves. arq keeps a heartbeat key in Redis; app.worker.check reads it.
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.worker.check"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      APP_DATABASE_URL: ${APP_DATABASE_URL:-postgresql+asyncpg://annotation:annotation_dev_password@postgres:5432/annotation}
+      APP_REDIS_URL: ${APP_REDIS_URL:-redis://redis:6379/0}
+      APP_DATABASE_AUTH: ${APP_DATABASE_AUTH:-password}
+      APP_REDIS_AUTH: ${APP_REDIS_AUTH:-password}
+      APP_MANAGED_IDENTITY_CLIENT_ID: ${APP_MANAGED_IDENTITY_CLIENT_ID:-}
+      APP_SECRET_KEY: ${APP_SECRET_KEY:-dev-only-insecure-secret-key-change-me}
+      APP_SECRET_KEY_PREVIOUS: ${APP_SECRET_KEY_PREVIOUS:-}
+      APP_ACCESS_TOKEN_TTL: ${APP_ACCESS_TOKEN_TTL:-3600}
+      APP_MFA_REQUIRED_FOR_ADMINS: ${APP_MFA_REQUIRED_FOR_ADMINS:-false}
+      APP_SIGNED_URL_TTL: ${APP_SIGNED_URL_TTL:-900}
+      APP_MODEL_DELETE_MODE: ${APP_MODEL_DELETE_MODE:-soft}
+      # How the model service reaches the API (local-connector media URLs).
+      APP_INTERNAL_API_URL: ${APP_INTERNAL_API_URL:-http://backend:8000}
+      APP_THUMBNAIL_SIZE: ${APP_THUMBNAIL_SIZE:-256}
+      APP_THUMBNAIL_MAX_SOURCE_BYTES: ${APP_THUMBNAIL_MAX_SOURCE_BYTES:-67108864}
+      APP_TILE_MIN_PIXELS: ${APP_TILE_MIN_PIXELS:-25000000}
+      APP_TILE_MAX_SOURCE_BYTES: ${APP_TILE_MAX_SOURCE_BYTES:-12884901888}
+      APP_TILE_WORK_DIR: ${APP_TILE_WORK_DIR:-}
+      APP_TASK_LOCK_TTL: ${APP_TASK_LOCK_TTL:-1800}
+      # Outbound webhooks (API-4)
+      APP_WEBHOOK_MAX_ATTEMPTS: ${APP_WEBHOOK_MAX_ATTEMPTS:-8}
+      APP_WEBHOOK_TIMEOUT: ${APP_WEBHOOK_TIMEOUT:-10}
+      APP_WEBHOOK_POLL_BATCH_SIZE: ${APP_WEBHOOK_POLL_BATCH_SIZE:-50}
+      APP_WEBHOOK_MAX_PER_MINUTE: ${APP_WEBHOOK_MAX_PER_MINUTE:-60}
+      # Dev only: the compose echo receiver is a private address (SEC-4).
+      APP_WEBHOOK_ALLOW_PRIVATE_URLS: ${APP_WEBHOOK_ALLOW_PRIVATE_URLS:-true}
+      # Notification e-mail (API-7); `mailpit` / port 1025 with `make emulators`.
+      APP_SMTP_HOST: ${APP_SMTP_HOST:-}
+      APP_SMTP_PORT: ${APP_SMTP_PORT:-587}
+      APP_SMTP_SECURITY: ${APP_SMTP_SECURITY:-starttls}
+      APP_SMTP_USERNAME: ${APP_SMTP_USERNAME:-}
+      APP_SMTP_PASSWORD: ${APP_SMTP_PASSWORD:-}
+      APP_SMTP_FROM: ${APP_SMTP_FROM:-Annotide <noreply@localhost>}
+      # Licensing (LIC-6, LIC-27): no server URL = nothing is ever sent.
+      APP_LICENSE_KEY: ${APP_LICENSE_KEY:-}
+      APP_INSTALL_ID: ${APP_INSTALL_ID:-}
+      APP_LICENSE_SERVER_URL: ${APP_LICENSE_SERVER_URL:-}
+      APP_LICENSE_REFRESH_ENABLED: ${APP_LICENSE_REFRESH_ENABLED:-true}
+      APP_TELEMETRY_ENABLED: ${APP_TELEMETRY_ENABLED:-true}
+      APP_CORS_ORIGINS: ${APP_CORS_ORIGINS:-http://localhost:5173}
+      APP_LOG_LEVEL: ${APP_LOG_LEVEL:-INFO}
+      APP_LOG_FORMAT: ${APP_LOG_FORMAT:-json}
+      APP_OTEL_ENABLED: ${APP_OTEL_ENABLED:-false}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
+      AZURITE_ACCOUNT_KEY: ${AZURITE_ACCOUNT_KEY:-Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==}
+      # Moto's accept-anything key pair for the S3 emulator (make seed-emulators).
+      EMULATOR_S3_CREDENTIALS: '{"access_key_id": "test", "secret_access_key": "test"}'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      azurite:
+        condition: service_healthy
+    networks:
+      - annotation-net
+
+  # Reference model service (§8). Runs the offline heuristic backend by
+  # default, so model-assisted pre-labelling works with no weights and no GPU.
+  # Point MODEL_BACKEND/MODEL_PATH at a real ONNX detector to swap it out.
+  model:
+    build:
+      context: ./model-service
+    image: annotide-model:local
+    environment:
+      MODEL_BACKEND: ${MODEL_BACKEND:-heuristic}
+      MODEL_PATH: ${MODEL_PATH:-}
+      # Optional bearer key for every route but /health and /ready. Empty = open.
+      # Register the model with identity_type bearer + a secret_ref for the same key.
+      MODEL_API_KEY: ${MODEL_API_KEY:-}
+      # OCR for scanned PDFs: auto (Tesseract in the image), none, tesseract,
+      # anthropic (Claude, needs ANTHROPIC_API_KEY) or openai (any
+      # OpenAI-compatible endpoint: OCR_LLM_BASE_URL, OCR_LLM_MODEL).
+      OCR_ENGINE: ${OCR_ENGINE:-auto}
+      OCR_LANGUAGES: ${OCR_LANGUAGES:-eng}
+      OCR_LLM_MODEL: ${OCR_LLM_MODEL:-}
+      OCR_LLM_BASE_URL: ${OCR_LLM_BASE_URL:-}
+      OCR_LLM_API_KEY: ${OCR_LLM_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports:
+      - "127.0.0.1:${MODEL_HOST_PORT:-9000}:9000"
+    networks:
+      - annotation-net
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api/v1}
+        # Azurite serves the demo media over plain http, which the default
+        # CSP (https: only) blocks. Override this for a deployment whose
+        # storage lives somewhere else.
+        CSP_MEDIA_ORIGINS: "${CSP_MEDIA_ORIGINS:-https: http://localhost:10000 http://localhost:9100 http://localhost:4443}"
+    image: annotide-frontend:local
+    ports:
+      - "127.0.0.1:${FRONTEND_HOST_PORT:-5173}:80"
+    depends_on:
+      - backend
+    networks:
+      - annotation-net
+
+  # k6 load test (NFR-1…4), only with `--profile loadtest`: `make loadtest`.
+  # Talks to the backend directly; see loadtest/README.md for other targets.
+  k6:
+    image: grafana/k6:1.3.0
+    profiles: ["loadtest"]
+    volumes:
+      - ./loadtest:/scripts:ro
+    environment:
+      BASE_URL: ${LOADTEST_BASE_URL:-http://backend:8000}
+    networks:
+      - annotation-net
+
+  # Local MLflow tracking server for the ML platform integration (API-6),
+  # only with `--profile mlflow`: `make mlflow`. Register it in the app as an
+  # `mlflow` platform with tracking_uri http://mlflow:5000 (the backend needs
+  # BACKEND_EXTRAS=mlflow); its UI is on http://localhost:${MLFLOW_HOST_PORT}.
+  # Dev only: no auth, SQLite store, artifacts on a volume.
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v3.16.1
+    profiles: ["mlflow"]
+    command:
+      - mlflow
+      - server
+      - --host=0.0.0.0
+      - --port=5000
+      - --backend-store-uri=sqlite:////mlflow/mlflow.db
+      - --artifacts-destination=/mlflow/artifacts
+      - --serve-artifacts
+      # The backend and worker call it as mlflow:5000; the browser as localhost.
+      - --allowed-hosts=mlflow,mlflow:5000,localhost,localhost:${MLFLOW_HOST_PORT:-5001}
+    volumes:
+      - mlflow_data:/mlflow
+    ports:
+      - "127.0.0.1:${MLFLOW_HOST_PORT:-5001}:5000"
+    networks:
+      - annotation-net
+
+  # Catches the app's notification e-mail (API-7) with `make emulators`.
+  # UI on :8025, SMTP on :1025.
+  mailpit:
+    image: axllent/mailpit:v1.27
+    profiles: ["emulators"]
+    ports:
+      - "127.0.0.1:${MAILPIT_HOST_PORT:-8025}:8025"
+      - "127.0.0.1:${MAILPIT_SMTP_HOST_PORT:-1025}:1025"
+    networks:
+      - annotation-net

@@ -1,0 +1,667 @@
+{
+  "errors": {
+    "unknown": "Unknown error"
+  },
+  "connectors": {
+    "title": "Connectors",
+    "adminOnly": "Connector registration is for system administrators. Contact one to add or change a connector.",
+    "types": {
+      "azureBlob": "Azure Blob Storage",
+      "local": "Local filesystem",
+      "s3": "Amazon S3",
+      "gcs": "Google Cloud Storage",
+      "http": "HTTP(S) file list",
+      "sharepoint": "SharePoint / OneDrive",
+      "databricksVolume": "Databricks Unity Catalog volume"
+    },
+    "httpReadOnlyNote": "read-only: a source, never a result connector",
+    "form": {
+      "createTitle": "New connector",
+      "editTitle": "Edit {{name}}",
+      "name": "Name",
+      "type": "Type",
+      "configPrefix": "Config:",
+      "identity": "Identity",
+      "secretRef": "Secret reference",
+      "secretRefHint": "A secret-store reference, never a raw secret. Leave blank to leave the existing secret unchanged when editing.",
+      "configLabel": "Config (JSON)",
+      "configErrorObject": "Config must be a JSON object.",
+      "configErrorJson": "Config must be valid JSON.",
+      "submitCreate": "Create connector",
+      "submitSave": "Save changes"
+    },
+    "row": {
+      "secretSet": "secret set",
+      "secretNone": "no secret",
+      "check": "Check",
+      "checking": "Checking…",
+      "confirmDeleteQuestion": "Delete this connector?",
+      "confirmDelete": "Confirm delete",
+      "deleting": "Deleting…",
+      "checkOk": "OK",
+      "checkFailed": "Failed"
+    },
+    "table": {
+      "name": "Name",
+      "type": "Type",
+      "identity": "Identity",
+      "secret": "Secret",
+      "created": "Created",
+      "actions": "Actions"
+    },
+    "loading": "Loading connectors…",
+    "loadError": "Could not load connectors",
+    "empty": {
+      "title": "No connectors",
+      "message": "No connectors have been registered yet."
+    },
+    "events": {
+      "on": "events on",
+      "enable": "Enable events",
+      "rotate": "New event URL",
+      "disable": "Disable events",
+      "working": "Saving…",
+      "revealTitle": "Event URL — shown once. Paste it into the storage notification subscription (Event Grid, SNS, EventBridge or Pub/Sub).",
+      "reveal": "Reveal",
+      "hide": "Hide",
+      "copy": "Copy",
+      "done": "Done"
+    },
+    "sharepointNote": "identity service_principal (secret: the app's client secret) or managed_identity; browser uploads are not available",
+    "businessOption": "{{label}} (Business)",
+    "databricksVolumeNote": "identity access_key (secret: a token) or service_principal (client_id in config, secret: its OAuth secret); media is served through the platform"
+  },
+  "models": {
+    "title": "Models",
+    "adminOnly": "Model registration is for system administrators. Contact one to add or change a model.",
+    "tasks": {
+      "detect": "Detect",
+      "segment": "Segment",
+      "classify": "Classify",
+      "ner": "NER",
+      "llm": "LLM",
+      "ocr": "OCR"
+    },
+    "form": {
+      "createTitle": "Register model",
+      "editTitle": "Edit {{name}}",
+      "name": "Name",
+      "task": "Task",
+      "endpoint": "Endpoint URL",
+      "identity": "Identity",
+      "secretRef": "Secret reference",
+      "secretRefHint": "A secret-store reference, never a raw key. Leave blank to leave the existing secret unchanged when editing.",
+      "errorEndpoint": "Endpoint URL must start with http:// or https://.",
+      "endpointHint": "Leave empty for an external producer, such as an AI agent that posts its own pre-labels through the MCP server.",
+      "errorSecretRequired": "Secret reference is required for this identity type.",
+      "scope": "Token scope",
+      "scopeHint": "The Microsoft Entra audience the endpoint accepts: https://ml.azure.com/.default for Azure ML, https://cognitiveservices.azure.com/.default for Azure OpenAI and AI Foundry. The identity also needs a role on the endpoint.",
+      "tenantId": "Tenant ID",
+      "clientId": "Client ID",
+      "clientSecretRef": "Client secret reference",
+      "managedIdentityClientId": "User-assigned identity client ID (optional)",
+      "managedIdentityClientIdHint": "Leave empty to use the platform's system-assigned identity, or its workload identity on AKS.",
+      "errorScope": "Token scope is required and must end with /.default.",
+      "errorServicePrincipal": "A service principal needs a tenant ID and a client ID.",
+      "submitCreate": "Register model",
+      "submitSave": "Save changes"
+    },
+    "row": {
+      "external": "External (posts its own pre-labels)",
+      "secretSet": "secret set",
+      "secretNone": "no secret",
+      "check": "Check",
+      "checking": "Checking…",
+      "versions": "Versions",
+      "hideVersions": "Hide versions",
+      "confirmDeleteQuestion": "Delete this model?",
+      "confirmDelete": "Confirm delete",
+      "deleting": "Deleting…",
+      "checkOk": "OK",
+      "checkFailed": "Failed"
+    },
+    "table": {
+      "name": "Name",
+      "task": "Task",
+      "endpoint": "Endpoint",
+      "identity": "Identity",
+      "secret": "Secret",
+      "created": "Created",
+      "actions": "Actions"
+    },
+    "loading": "Loading models…",
+    "loadError": "Could not load models",
+    "empty": {
+      "title": "No models",
+      "message": "No models have been registered yet."
+    },
+    "addVersion": {
+      "ariaLabel": "Add version",
+      "versionNumber": "Version number",
+      "next": "Next",
+      "classMapping": "Class mapping",
+      "modelClass": "Model class",
+      "platformClass": "Platform class",
+      "drop": "Drop",
+      "addRow": "Add row",
+      "metrics": "Metrics (JSON)",
+      "lineageLegend": "Trained on (lineage)",
+      "lineageHint": "Copy the snapshot id and digest from the <code>retrain.requested</code> payload; the server rejects a digest that does not match the snapshot.",
+      "snapshotId": "Snapshot id",
+      "optional": "optional",
+      "snapshotDigest": "Snapshot digest (sha256)",
+      "trainingRun": "Training run (JSON)",
+      "errorDigest": "Snapshot digest must be 64 hex characters (sha256).",
+      "errorVersionPositive": "Version must be a positive integer.",
+      "errorInvalidJson": "{{label}} must be valid JSON.",
+      "errorNotObject": "{{label}} must be a JSON object.",
+      "labelMetrics": "Metrics",
+      "labelTrainingRun": "Training run",
+      "adding": "Adding…",
+      "submit": "Add version"
+    },
+    "versionsPanel": {
+      "heading": "Versions",
+      "loading": "Loading versions…",
+      "loadError": "Could not load versions",
+      "empty": "No versions yet.",
+      "dropped": "dropped",
+      "addVersion": "Add version",
+      "snapshotPart": "snapshot {{id}}",
+      "digestPart": "digest {{digest}}",
+      "runPart": "run {{id}}",
+      "trainedOn": "Trained on {{parts}}",
+      "importVersion": "Import from MLflow",
+      "showFamily": "Show family",
+      "hideFamily": "Hide family",
+      "derivedFrom": {
+        "trained": "Fine-tuned from {{parent}}",
+        "distilled": "Distilled from {{parent}}",
+        "quantized": "Quantized from {{parent}}"
+      },
+      "otherModelParent": "a version of another model"
+    },
+    "family": {
+      "heading": "Model family",
+      "hint": "How these versions were made: trained, distilled from a teacher, or quantized. Select a version to compare it with its parent.",
+      "loading": "Loading family…",
+      "loadError": "Could not load the model family",
+      "graphLabel": "Derivation graph of the model's versions",
+      "noMetrics": "no metrics",
+      "derivation": {
+        "trained": "trained",
+        "distilled": "distilled",
+        "quantized": "quantized"
+      },
+      "tradeoffHeading": "Accuracy against cost",
+      "tradeoffLabel": "F1 against {{axis}} for each version",
+      "tradeoffEmpty": "No version has both f1 and this cost metric yet. The training pipeline writes f1, size_bytes and latency_ms_p50.",
+      "axisLabel": "Cost axis",
+      "axis": {
+        "size": "size",
+        "latency": "latency"
+      },
+      "axisTitle": {
+        "size": "Artifact size (smaller is better)",
+        "latency": "Median latency per item (lower is better)"
+      },
+      "noParent": "This version has no parent in the family, so there is nothing to compare it with.",
+      "noPerClass": "Neither version has per-class scores.",
+      "compareHeading": "{{version}} against {{parent}}, F1 per class",
+      "columnClass": "Class",
+      "columnChange": "Change"
+    },
+    "metrics": {
+      "show": "Show corrections",
+      "hide": "Hide corrections",
+      "loading": "Loading metrics…",
+      "regionLabel": "Corrections for version {{versionId}}",
+      "summary": "{{predicted}} items pre-labelled, {{corrected}} finished by a human ({{acceptedUnchanged}} accepted as-is), {{pending}} pending.",
+      "scores": "Precision {{precision}} · Recall {{recall}}",
+      "meanIou": " · mean IoU of adjusted boxes {{value}}",
+      "shapes": "Shapes: {{kept}} kept, {{adjusted}} adjusted, {{relabeled}} relabeled, {{deleted}} deleted, {{added}} added by humans.",
+      "columnClass": "Class",
+      "columnModel": "Model",
+      "columnPrecision": "Precision",
+      "columnRecall": "Recall"
+    }
+  },
+  "webhooks": {
+    "page": {
+      "title": "Organisation webhooks",
+      "adminOnly": "Organisation-wide webhooks are for system administrators. Project owners can add webhooks for their own project under the project's settings."
+    },
+    "panel": {
+      "heading": "Webhooks",
+      "descriptionProject": "Subscribers receive a signed POST for each event in this project. Verify <code>X-Annotation-Signature</code> with the secret shown once at creation.",
+      "descriptionOrg": "Subscribers receive a signed POST for each event in the organisation. Verify <code>X-Annotation-Signature</code> with the secret shown once at creation.",
+      "loading": "Loading webhooks…",
+      "loadError": "Could not load webhooks",
+      "empty": "No webhooks yet.",
+      "hideLog": "Hide log",
+      "deliveries": "Deliveries",
+      "sendTest": "Send test",
+      "pause": "Pause",
+      "resume": "Resume",
+      "rotateSecret": "Rotate secret",
+      "confirmDelete": "Confirm delete",
+      "testQueued": "Test queued — it goes out on the worker's next tick.",
+      "allEvents": "all events",
+      "paused": "paused",
+      "lastResponse": "last response {{status}}",
+      "orgWide": "organisation-wide",
+      "formErrorUrl": "Enter an http(s) URL.",
+      "formErrorEvents": "Pick at least one event.",
+      "formErrorCreate": "Could not create the webhook.",
+      "formErrorAction": "Action failed.",
+      "loadErrorFallback": "Unknown error",
+      "format": {
+        "json": "Signed JSON",
+        "slack": "Slack",
+        "teams": "Microsoft Teams"
+      },
+      "newForm": {
+        "ariaLabel": "New webhook",
+        "url": "URL",
+        "urlAriaLabel": "Webhook URL",
+        "description": "Description",
+        "descriptionAriaLabel": "Webhook description",
+        "format": "Format",
+        "formatAriaLabel": "Webhook format",
+        "eventsLegend": "Events",
+        "all": "all",
+        "creating": "Creating…",
+        "submit": "Add webhook"
+      },
+      "secretReveal": {
+        "title": "Signing secret — shown once, copy it now.",
+        "reveal": "Reveal",
+        "hide": "Hide",
+        "copy": "Copy",
+        "done": "Done"
+      },
+      "deliveryLog": {
+        "loading": "Loading deliveries…",
+        "loadError": "Could not load deliveries.",
+        "empty": "No deliveries yet.",
+        "ariaLabel": "Deliveries",
+        "columnEvent": "Event",
+        "columnStatus": "Status",
+        "columnAttempts": "Attempts",
+        "columnResponse": "Response",
+        "columnWhen": "When"
+      }
+    }
+  },
+  "apiKeys": {
+    "scopes": {
+      "read": {
+        "label": "Read",
+        "hint": "List projects, items and annotations"
+      },
+      "write": {
+        "label": "Write",
+        "hint": "Create and edit annotations, run jobs"
+      },
+      "admin": {
+        "label": "Admin",
+        "hint": "Manage projects, members and settings"
+      }
+    },
+    "form": {
+      "name": "Name",
+      "namePlaceholder": "CI export job",
+      "expiresOn": "Expires on",
+      "expiresHint": "Leave empty for a key that never expires.",
+      "scopesLegend": "Scopes",
+      "creating": "Creating…",
+      "submit": "Create key"
+    },
+    "newKeyBanner": {
+      "title": "Key “{{name}}” created",
+      "copyNotice": "Copy it now. For security it is shown only once and cannot be retrieved later.",
+      "tokenAriaLabel": "API key token",
+      "copied": "Copied",
+      "copy": "Copy",
+      "dismiss": "Dismiss"
+    },
+    "table": {
+      "name": "Name",
+      "scopes": "Scopes",
+      "status": "Status",
+      "created": "Created",
+      "lastUsed": "Last used",
+      "expires": "Expires",
+      "actions": "Actions"
+    },
+    "status": {
+      "active": "active",
+      "expired": "expired",
+      "revoked": "revoked"
+    },
+    "row": {
+      "revoke": "Revoke",
+      "revokeAriaLabel": "Revoke {{name}}"
+    },
+    "confirmRevoke": "Click Revoke again to confirm. A revoked key stops working immediately and cannot be restored.",
+    "page": {
+      "title": "API keys",
+      "description": "Keys act as you with the scopes you grant them. Send one as <code>Authorization: Bearer {{example}}</code>. Keys cannot manage other keys.",
+      "createTitle": "Create API key",
+      "revokeError": "Could not revoke key: {{message}}",
+      "loading": "Loading API keys…",
+      "loadError": "Could not load API keys",
+      "empty": {
+        "title": "No API keys",
+        "message": "Create one above to call the API from scripts."
+      }
+    }
+  },
+  "serviceAccounts": {
+    "heading": "Service accounts",
+    "description": "A service account cannot sign in; it acts only through its API keys, with the project roles it is given. Add it to a project from the project's Members panel using its e-mail.",
+    "createForm": {
+      "ariaLabel": "Create service account",
+      "displayName": "Display name",
+      "namePlaceholder": "Nightly export",
+      "creating": "Creating…",
+      "submit": "Create service account",
+      "error": "Could not create service account: {{message}}"
+    },
+    "deactivateError": "Could not deactivate service account: {{message}}",
+    "loading": "Loading service accounts…",
+    "loadError": "Could not load service accounts",
+    "empty": {
+      "title": "No service accounts",
+      "message": "Create one for a CI job or an integration."
+    },
+    "accountKeys": {
+      "createKeyTitle": "Create key for {{name}}",
+      "revokeError": "Could not revoke key: {{message}}",
+      "loading": "Loading keys…",
+      "loadError": "Could not load keys",
+      "empty": "This account has no keys yet."
+    },
+    "card": {
+      "deactivated": "deactivated",
+      "copied": "Copied",
+      "copyEmail": "Copy e-mail",
+      "created": "Created {{date}}",
+      "showKeys": "Keys",
+      "hideKeys": "Hide keys",
+      "showKeysAria": "Show keys for {{name}}",
+      "hideKeysAria": "Hide keys for {{name}}",
+      "deactivate": "Deactivate",
+      "confirmDeactivate": "Confirm deactivate",
+      "deactivateAriaLabel": "Deactivate {{name}}",
+      "confirmNotice": "Deactivating revokes every key this account holds, immediately. The account cannot be reactivated."
+    }
+  },
+  "licence": {
+    "page": {
+      "title": "Licence",
+      "description": "A key pasted here is kept next to <code>APP_LICENSE_KEY</code>; the valid key that expires last is in force. A seat is a person who signed in during the last 30 days.",
+      "loading": "Loading licence…",
+      "loadError": "Could not load the licence",
+      "installTitle": "Install a key",
+      "keyLabel": "Licence key",
+      "installed": "Licence installed.",
+      "install": "Install key",
+      "removeConfirm": "Remove the stored key? The installation falls back to <code>APP_LICENSE_KEY</code> or Community.",
+      "remove": "Remove",
+      "removeStored": "Remove stored key",
+      "removeError": "Could not remove the key: {{message}}"
+    },
+    "details": {
+      "ariaLabel": "Licence details",
+      "heading": "Licence in force",
+      "status": {
+        "community": "Free",
+        "valid": "Valid",
+        "expired": "Expired",
+        "invalid": "Invalid key"
+      },
+      "rows": {
+        "edition": "Edition",
+        "licensee": "Licensee",
+        "seatsInUse": "Seats in use",
+        "expires": "Expires",
+        "graceEnds": "Grace ends",
+        "boundTo": "Bound to",
+        "revoked": "Revoked",
+        "keyFrom": "Key from",
+        "licenceId": "Licence id"
+      },
+      "anyHost": "Any host",
+      "source": {
+        "env": "APP_LICENSE_KEY",
+        "admin": "Pasted here",
+        "refresh": "Licence refresh",
+        "trial": "Trial"
+      }
+    },
+    "edition": {
+      "ariaLabel": "Edition",
+      "communityUsage": "{{active}} of 3 people active on the free Community edition.",
+      "communityNext": "Team adds people (12 €/user/month, or 29 €/month for five plus 12 € per extra user). Business adds single sign-on, SCIM, folder permissions, full audit history and quality control (20 €/user/month).",
+      "pricing": "See pricing",
+      "startTrial": "Start 30-day Business trial",
+      "trialStarting": "Starting trial…",
+      "trialPrivacy": "Free, no card and no e-mail. Asks the licence server for a trial key, sending only this installation's id and host. When it ends, the installation returns to Community and keeps all its data.",
+      "trialUsed": "This installation has had its Business trial. A licence key adds people and the Business features.",
+      "trialUntil": "Every Business feature, for up to 25 people, until {{date}}. Afterwards the installation returns to Community, for up to three people, and keeps all its data.",
+      "featuresHeading": "Business features",
+      "included": "Included"
+    },
+    "features": {
+      "sso": "Single sign-on (Entra ID, OIDC)",
+      "scim": "SCIM provisioning",
+      "path_permissions": "Folder-level permissions",
+      "audit_history": "Audit history beyond 30 days",
+      "seat_report": "Seat report",
+      "sharepoint": "SharePoint connector",
+      "ml_platforms": "Azure ML, Databricks and MLflow",
+      "quality": "Consensus and quality control"
+    },
+    "badge": {
+      "label": "Business",
+      "hint": "Part of the Business edition. Start a free trial or add a key on the licence page."
+    },
+    "editions": {
+      "community": "Community",
+      "team": "Team",
+      "business": "Business",
+      "enterprise": "Enterprise",
+      "trial": "Business trial"
+    },
+    "seats": {
+      "noLimit": "{{active}} active — this build enforces no seat limit",
+      "communityOfThree": "{{active}} of 3 — Community is for up to three people",
+      "withOverage": "{{active}} of {{seats}} (+{{overage}} overage allowed)"
+    },
+    "server": {
+      "sectionAriaLabel": "Licence server",
+      "heading": "Licence server",
+      "refresh": {
+        "loadError": "Could not load the refresh status: {{message}}",
+        "heading": "Licence refresh",
+        "description": "Fetches the renewed key for the licence in force. Sends the licence id, install id, host and number of active users — no names or addresses. {{state}}",
+        "stateNoServer": "No licence server is configured; nothing is sent.",
+        "stateDisabled": "Switched off; renewed keys have to be pasted by hand.",
+        "stateIdle": "Idle: there is no licence key to refresh.",
+        "stateOn": "On — once a day.",
+        "lastStatus": "Last succeeded {{succeeded}}; last tried {{attempted}}.",
+        "failed": "Last refresh failed: {{error}}",
+        "payloadWhatSent": "What is sent",
+        "payloadLastSent": "Last sent",
+        "refreshNow": "Refresh now"
+      },
+      "heartbeat": {
+        "loadError": "Could not load the heartbeat preview: {{message}}",
+        "heading": "Heartbeat",
+        "description": "On by default; set <code>APP_TELEMETRY_ENABLED=false</code> to turn it off. Weekly. Only salted hashes of organisation signals, never names or addresses. {{state}}",
+        "stateOff": "Off.",
+        "stateOn": "On.",
+        "stateNoServer": "On, but no licence server is set.",
+        "lastStatus": "Last sent {{sent}}; last tried {{attempted}}.",
+        "failed": "Last heartbeat failed: {{error}}",
+        "payloadWouldSend": "What would be sent",
+        "payloadLastSent": "Last sent",
+        "withheld": "Left out of the fingerprint (kept on this installation, not sent)"
+      }
+    },
+    "seatReport": {
+      "ariaLabel": "Seat report",
+      "heading": "Seat report",
+      "description": "Active users per month, rebuilt from sign-ins. Send it to the vendor at renewal; the peak over your seats is the overage to true up. Defaults to the last 365 days.",
+      "locked": "The monthly seat report for procurement and true-up is part of the Business edition. The seat count above is always shown.",
+      "from": "From",
+      "to": "To",
+      "downloadCsv": "Download CSV",
+      "loading": "Loading seat report…",
+      "loadError": "Could not load the seat report: {{message}}",
+      "peakBase": "Peak: {{peak}} active",
+      "peakForSeats": " for {{seats}} seats",
+      "peakOverage": " (overage {{overage}})",
+      "table": {
+        "month": "Month",
+        "activeUsers": "Active users",
+        "peakAtOnce": "Peak at once",
+        "overage": "Overage"
+      }
+    },
+    "usageNotices": {
+      "ariaLabel": "Usage notices",
+      "heading": "Usage notices",
+      "description": "Signs that an account is shared or used by more than one person, from the last {{days}} days. They are worked out here, never sent anywhere, and nothing is blocked. People sharing an account still count as seats.",
+      "loadError": "Could not load usage notices: {{message}}",
+      "empty": "Nothing to report.",
+      "kinds": {
+        "parallel_sign_ins": "Parallel sign-ins",
+        "parallel_tasks": "Parallel tasks",
+        "superhuman_pace": "Superhuman pace",
+        "service_account_annotating": "Service account annotating"
+      }
+    },
+    "banner": {
+      "link": "Licence settings",
+      "expiredRevoked": "The licence was revoked on {{date}}.",
+      "expiredHostMismatch": "The licence key is for {{hosts}}, not the address this installation is reached on.",
+      "expiredPlain": "The licence expired on {{date}}.",
+      "restricted": "{{expired}} Annotation and new tasks are paused until a renewed key is installed; reading and export still work.",
+      "graceWarning": "{{expired}} Work continues{{until}}; install a renewed key before then.",
+      "untilDate": " until {{date}}",
+      "invalid": "The licence key is not valid, so this installation runs as Community (up to three users).",
+      "ownerOnly": "More than three people are active on the free Community edition, so only the owner can sign in. Deactivate users down to three, or add a Team or Business licence.",
+      "trialEnding": "The Business trial ends on {{date}}. The installation then returns to the free Community edition, for up to three people.",
+      "allSeatsUsed": "Every seat is in use, overage included: {{active}} active users for {{seats}} seats. New users cannot sign in until seats are added.",
+      "overageAllowed": "{{active}} active users for {{seats}} seats. The overage (up to {{limit}}) is allowed and is invoiced at renewal."
+    }
+  },
+  "security": {
+    "title": "Security",
+    "description": "Two-step sign-in asks for a code from an authenticator app (Microsoft Authenticator, Google Authenticator, 1Password, …) after your password.",
+    "loadError": "Could not load your security settings",
+    "mfaRequired": {
+      "notice": "Administrators on this installation must use two-step sign-in. Set up an authenticator app to continue.",
+      "done": "Two-step sign-in is on. Save your recovery codes, then sign in again with a code.",
+      "signInAgain": "Sign in again"
+    },
+    "mfa": {
+      "ariaLabel": "Two-step sign-in",
+      "heading": "Two-step sign-in",
+      "ssoNotice": "You sign in through single sign-on, so two-step sign-in is set up at your identity provider, not here.",
+      "off": "Off.",
+      "setup": "Set up an authenticator app",
+      "scanInstructions": "Scan the code with your app, or open the link on your phone, or type the key.",
+      "qrLabel": "QR code for the authenticator app",
+      "key": "Key",
+      "link": "Link",
+      "codeFromApp": "Code from the app",
+      "turnOn": "Turn on",
+      "onStatus_one": "On. {{count}} recovery code left.",
+      "onStatus_other": "On. {{count}} recovery codes left.",
+      "newRecoveryCodes": "New recovery codes",
+      "codeOrRecovery": "Code or recovery code",
+      "turnOff": "Turn off"
+    },
+    "recoveryCodes": {
+      "title": "Recovery codes — save them now; they are not shown again.",
+      "hint": "Each works once, in place of a code from the app, if you lose your phone.",
+      "ariaLabel": "Recovery codes"
+    },
+    "notifications": {
+      "ariaLabel": "Notifications",
+      "heading": "Notifications",
+      "description": "Mentions, replies to your comments and review verdicts always appear under the bell. You also get them by e-mail when your administrator has set up e-mail.",
+      "email": "E-mail me my notifications"
+    },
+    "personalData": {
+      "ariaLabel": "Your data",
+      "heading": "Your data",
+      "description": "Download everything this installation holds about you: profile, project memberships, comments, annotation history, tasks, notifications and sign-in records. To have your account erased, ask an administrator.",
+      "preparing": "Preparing…",
+      "download": "Download my data"
+    }
+  },
+  "mlPlatforms": {
+    "heading": "ML platforms",
+    "intro": "MLflow tracking servers, Databricks and Azure ML workspaces. Snapshots are published to them as MLflow runs, trained versions are imported from them, and a Databricks job can run a retrain. Nothing is copied: runs point at the snapshot in your storage.",
+    "add": "Add platform",
+    "loading": "Loading ML platforms…",
+    "loadError": "Could not load ML platforms",
+    "empty": "No ML platforms yet.",
+    "check": "Check",
+    "checking": "Checking…",
+    "checkOk": "Connected. Experiments: {{experiments}}",
+    "delete": "Delete",
+    "confirmDelete": "Confirm delete",
+    "jobIdShort": "retrain job {{id}}",
+    "kinds": {
+      "mlflow": "MLflow",
+      "databricks": "Databricks",
+      "azureml": "Azure ML"
+    },
+    "identities": {
+      "none": "No authentication",
+      "bearer": "Token",
+      "basic": "User and password",
+      "service_principal": "Service principal",
+      "managed_identity": "Managed identity"
+    },
+    "uriPlaceholder": {
+      "mlflow": "http://mlflow:5000",
+      "databricks": "https://adb-1234567890.12.azuredatabricks.net",
+      "azureml": "azureml://<region>.api.azureml.ms/mlflow/v1.0/subscriptions/…/workspaces/<ws>"
+    },
+    "form": {
+      "aria": "Register an ML platform",
+      "name": "Name",
+      "kind": "Kind",
+      "trackingUri": "Tracking URI",
+      "identity": "Authentication",
+      "secretRef": "Secret reference",
+      "clientId": "Client ID",
+      "tenantId": "Tenant ID",
+      "jobId": "Retrain job ID (optional)",
+      "secretHint": "The secret reference names where the credential lives (env:NAME, file:/path, azurekeyvault://vault/name, …); the credential itself is never stored or shown. A basic-auth secret is user:password.",
+      "submit": "Register",
+      "cancel": "Cancel",
+      "uiUrl": "UI URL (optional, if not the tracking URI)"
+    },
+    "import": {
+      "aria": "Import a model version from MLflow",
+      "noPlatforms": "Register an ML platform below first.",
+      "platform": "Platform",
+      "source": "From",
+      "byRun": "Run ID",
+      "byRegistered": "Registered model version",
+      "runId": "Run ID",
+      "registeredModel": "Registered model",
+      "modelVersion": "Version",
+      "hint": "Metrics, parameters and a link to the run are stored with the version; the snapshot comes from the run's annotation.snapshot_* tags or its snapshot dataset input.",
+      "submit": "Import",
+      "importing": "Importing…"
+    }
+  }
+}

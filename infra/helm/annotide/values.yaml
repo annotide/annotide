@@ -1,0 +1,282 @@
+# Default values for annotide. See README.md for a walkthrough.
+
+# -- Images. Published from this repo (backend/, frontend/, model-service/)
+# to ghcr.io/annotide by .github/workflows/release.yml; `tag` defaults to
+# the chart's appVersion. Override `registry` to use your own mirror or a
+# locally built image.
+image:
+  registry: ghcr.io/annotide
+  pullPolicy: IfNotPresent
+  backend:
+    repository: annotide-backend
+    tag: ""
+  frontend:
+    repository: annotide-frontend
+    tag: ""
+  model:
+    repository: annotide-model
+    tag: ""
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+# -- Public URL of the installation, e.g. https://annotate.example.com.
+# Drives APP_FRONTEND_URL, APP_CORS_ORIGINS, APP_PUBLIC_HOSTNAME and the
+# default OIDC redirect URI. Defaults to the first ingress host.
+publicUrl: ""
+
+# -- External PostgreSQL 16 and Redis 7 (not deployed by this chart).
+# With Microsoft Entra sign-in (config APP_DATABASE_AUTH / APP_REDIS_AUTH =
+# entra, as infra/terraform/azure sets) the URLs carry no password.
+database:
+  # postgresql+asyncpg://user:password@host:5432/annotation — goes into the Secret.
+  url: ""
+redis:
+  # redis://host:6379/0 (rediss:// for TLS) — goes into the Secret.
+  url: ""
+
+# -- Secret values. Leave `existingSecret` empty to let the chart create one
+# from the values below; set it to use a Secret you manage (sealed-secrets,
+# external-secrets, ...). That Secret must hold APP_DATABASE_URL,
+# APP_REDIS_URL and APP_SECRET_KEY, plus any optional keys you use
+# (APP_OIDC_CLIENT_SECRET, APP_LICENSE_KEY, ...).
+secrets:
+  existingSecret: ""
+  # Signing key for access tokens and sealed MFA / webhook secrets. 32+
+  # random bytes. API keys do not depend on it. To rotate: put the old value
+  # in secretKeyPrevious, the new one here, upgrade, run
+  # `python -m app.cli reseal-secrets` in a backend pod, wait an hour
+  # (APP_ACCESS_TOKEN_TTL), then clear secretKeyPrevious.
+  secretKey: ""
+  secretKeyPrevious: ""
+  oidcClientSecret: ""
+  # SMTP password for notification e-mail (API-7), with smtp.username.
+  smtpPassword: ""
+  licenseKey: ""
+  # Any other secret APP_* variable, e.g. an OIDC client secret.
+  extra: {}
+
+# -- Non-secret settings, rendered into a ConfigMap as environment variables
+# (APP_* and OTEL_*; names and defaults in docs/CONTRACTS.md). The chart sets
+# APP_ENV, APP_LICENSE_SERVER_URL (https://licence.annotide.com),
+# APP_FRONTEND_URL, APP_CORS_ORIGINS, APP_PUBLIC_HOSTNAME,
+# APP_OIDC_REDIRECT_URI and APP_INSTALL_ID (generated once, then kept from the
+# live ConfigMap) itself unless you set them here. Rendering with
+# `helm template` (GitOps) cannot see the live ConfigMap: set APP_INSTALL_ID
+# to a fixed random value there, or it changes on every render.
+config:
+  APP_LOG_FORMAT: json
+  APP_LOG_LEVEL: INFO
+  # The ingress controller's pod CIDR, so audit rows record the client IP.
+  APP_TRUSTED_PROXIES: ""
+
+# -- Notification e-mail (API-7). Empty host = no e-mail; the password goes
+# in secrets.smtpPassword. Teams and Slack are webhooks with a chat format.
+smtp:
+  host: ""
+  port: 587
+  # starttls | ssl | none
+  security: starttls
+  username: ""
+  from: "Annotide <noreply@example.com>"
+
+# -- Single sign-on (AUTH-1). Empty issuer = local accounts only.
+oidc:
+  issuer: ""
+  clientId: ""
+  displayName: Single sign-on
+  organizationSlug: ""
+  groupsClaim: groups
+  adminGroups: ""
+  # Link sign-ins to existing accounts by e-mail without `email_verified`
+  # (Entra ID). Only if users cannot set their own address at the provider.
+  trustUnverifiedEmail: false
+
+# -- OpenTelemetry (OPS-3). Needs a backend image built with
+# `--build-arg EXTRAS=otel`; the API and worker refuse to start otherwise.
+otel:
+  enabled: false
+  endpoint: http://otel-collector:4318
+
+# -- Labels added to every pod. AKS workload identity needs
+# `azure.workload.identity/use: "true"` here (see infra/terraform/azure).
+podLabels: {}
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+  # Workload identity (Azure, GKE, EKS) usually goes here as an annotation.
+  automountToken: false
+
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+
+backend:
+  replicas: 2
+  # Numeric user of the image (backend/Dockerfile); the worker and migrations use it too.
+  uid: 1000
+  resources:
+    requests: { cpu: 250m, memory: 384Mi }
+    limits: { memory: 1Gi }
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  service:
+    type: ClusterIP
+    port: 8000
+  pdb:
+    enabled: true
+    minAvailable: 1
+  # HorizontalPodAutoscaler on CPU (OPS-5); `replicas` is ignored when on.
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+
+worker:
+  replicas: 1
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { memory: 4Gi }
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  # Scratch space for tiling very large images (IMG-1); mounted at /tmp.
+  scratch:
+    sizeLimit: 20Gi
+  # KEDA ScaledObject (OPS-5): scales on the job backlog counted in the
+  # `job` table (queued + running rows), the queue's source of truth. Needs
+  # KEDA in the cluster; `replicas` is ignored when on. Never below one
+  # replica: the worker also runs the cron jobs (outbox, lock reaper,
+  # webhooks, licence refresh).
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    # Target backlog per replica. A worker runs up to 10 jobs at once (arq).
+    jobsPerReplica: 5
+    pollingInterval: 15
+    # Seconds of low backlog before scaling in. A worker stopped mid-job gets
+    # 45 s to finish, then its jobs go back to the queue.
+    cooldownPeriod: 300
+    # libpq connection string for KEDA's PostgreSQL scaler (a role that can
+    # SELECT from `job` is enough). Empty: `database.url` without the
+    # `+asyncpg` driver suffix. With `secrets.existingSecret`, put it in that
+    # Secret under `postgresConnectionKey` instead.
+    postgresConnection: ""
+    postgresConnectionKey: KEDA_POSTGRES_CONNECTION
+
+frontend:
+  replicas: 2
+  # nginx:alpine's nginx user.
+  uid: 101
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { memory: 256Mi }
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  service:
+    type: ClusterIP
+    port: 80
+  pdb:
+    enabled: true
+    minAvailable: 1
+
+# -- Reference model service (§8). Off by default: production installs bring
+# their own model endpoints (BYOM) and register them in the UI.
+model:
+  enabled: false
+  replicas: 1
+  uid: 10001
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { memory: 2Gi }
+  service:
+    port: 9000
+  # Extra environment for the reference model service, e.g. MODEL_API_KEY to
+  # require a bearer token on every route but /health and /ready; register
+  # the model with identity_type "bearer" and a secret_ref holding the same
+  # key (model-service/README.md).
+  env: {}
+
+# -- Database migrations (`alembic upgrade head`) run as a Helm hook Job
+# before every install and upgrade, so pods never start on an old schema.
+migrations:
+  enabled: true
+  backoffLimit: 1
+  activeDeadlineSeconds: 900
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { memory: 512Mi }
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  # cert-manager ClusterIssuer (e.g. letsencrypt): adds the
+  # cert-manager.io/cluster-issuer annotation and, unless `tls` is set, a TLS
+  # block for every host with the secret <fullname>-tls. See
+  # infra/terraform/azure/README.md, "HTTPS".
+  clusterIssuer: ""
+  hosts:
+    - host: annotate.example.com
+  tls: []
+  #  - secretName: annotate-tls
+  #    hosts: [annotate.example.com]
+
+# -- NetworkPolicies (ingress only). Every chart pod accepts traffic only
+# from where it needs it: the frontend on its HTTP port (from `ingressFrom`,
+# or from anywhere when that is empty), the API from the frontend's nginx,
+# the model service from the API and worker; the worker and the migration Job
+# accept nothing. Needs a CNI that enforces policies (Calico, Cilium, Azure
+# NPM, …); elsewhere they are accepted and ignored. Egress is not restricted:
+# the API and worker reach customer storage and model endpoints anywhere.
+networkPolicy:
+  enabled: false
+  # Peers allowed to reach the frontend, typically the ingress controller:
+  #   - namespaceSelector:
+  #       matchLabels: { kubernetes.io/metadata.name: ingress-nginx }
+  ingressFrom: []
+  # Extra peers allowed to reach the API directly (e.g. a metrics scraper).
+  backendExtraFrom: []
+
+# -- Alert rules (OPS-4) as a PrometheusRule (prometheus-operator). Needs
+# `otel.enabled` and a collector that exports metrics to Prometheus with the
+# default name translation (`annotation.jobs.queued` →
+# `annotation_jobs_queued`, units as suffixes, OTel `service.name` → `job`).
+alerts:
+  enabled: false
+  # Extra labels on the PrometheusRule, e.g. `release: kube-prometheus-stack`
+  # so the operator's ruleSelector picks it up.
+  labels: {}
+  # PromQL label matchers for this release's API and worker series. Two
+  # releases in one Prometheus need distinct OTEL_SERVICE_NAME values here.
+  apiSelector: 'job=~"(.*/)?annotation-api"'
+  workerSelector: 'job=~"(.*/)?annotation-worker"'
+  # Extra labels on every alert (routing), e.g. `team: annotation`.
+  extraAlertLabels: {}
+  thresholds:
+    # Share of API requests answered with a 5xx, over 5 minutes.
+    apiErrorRatio: 0.05
+    # 95th percentile API latency (NFR targets are still to be confirmed).
+    apiLatencyP95Seconds: 1
+    # Share of job runs (not cron ticks) ending in an error, over 15 minutes.
+    jobFailureRatio: 0.2
+    # Oldest queued job has waited this long.
+    queueWaitSeconds: 600
+    # Oldest unpublished outbox event (results not yet in customer storage).
+    outboxAgeSeconds: 900

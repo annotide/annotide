@@ -1,0 +1,75 @@
+[project]
+name = "annotide-training"
+version = "0.1.0"
+description = "Cloud-agnostic annotation platform — reference customer-side training pipeline (ML-9, EXP-8)"
+requires-python = ">=3.12"
+# The platform never trains (ML-9); this runs on the customer's side. The
+# pipeline talks to the platform through the SDK (../sdk, API-3) — a real
+# trainer brings its own framework as an extra, never the platform image.
+# annotide is not on a package index yet: install ../sdk first, or pip
+# will look the name up on PyPI.
+dependencies = [
+    "annotide>=0.1",
+]
+
+[project.optional-dependencies]
+# `--trainer fasterrcnn`: torchvision's Faster R-CNN, exported to ONNX for
+# model-service's onnx backend. All BSD / MIT / Apache licensed.
+torch = [
+    "torch>=2.5",
+    "torchvision>=0.20",
+    "onnx>=1.16",
+    "onnxruntime>=1.20",
+    "numpy>=2.1",
+    "pillow>=11.0",
+]
+# `--mlflow-experiment`: record runs in MLflow / Databricks / Azure ML (API-6).
+mlflow = ["mlflow-skinny>=3.1"]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.8",
+    "mypy>=1.13",
+]
+
+[project.scripts]
+annotide-train = "annotide_training.cli:main"
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["annotide_training*"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["annotide_training", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "A", "C4", "SIM", "RUF"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["annotide_training"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unused_ignores = true
+# The SDK is installed editable from ../sdk, which mypy cannot follow.
+mypy_path = "../sdk"
+
+[[tool.mypy.overrides]]
+# No type information shipped; torch itself is typed.
+module = ["torchvision.*", "onnxruntime.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# The `mlflow` extra: optional, partly untyped. Any either way.
+module = ["mlflow", "mlflow.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"

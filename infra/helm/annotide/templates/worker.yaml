@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ap.fullname" . }}-worker
+  labels:
+    {{- include "ap.labels" (dict "ctx" . "component" "worker") | nindent 4 }}
+spec:
+  {{- if not .Values.worker.autoscaling.enabled }}
+  replicas: {{ .Values.worker.replicas }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "ap.selectorLabels" (dict "ctx" . "component" "worker") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ap.selectorLabels" (dict "ctx" . "component" "worker") | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.worker.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "ap.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountToken }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- include "ap.podSecurityContext" (dict "ctx" . "uid" .Values.backend.uid) | nindent 8 }}
+      # On SIGTERM running jobs get 45 s to finish, then go back to the queue
+      # (SHUTDOWN_JOB_WAIT_SECONDS in app/worker/main.py); this must be longer.
+      # Only a job killed outright stays `running` until the stranded-job cron
+      # fails it for a manual retry.
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: worker
+          image: {{ include "ap.image" (dict "ctx" . "image" .Values.image.backend) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["arq", "app.worker.main.WorkerSettings"]
+          envFrom:
+            {{- include "ap.envFrom" . | nindent 12 }}
+          livenessProbe:
+            # The worker keeps a health key in Redis; the check exits non-zero when
+            # it is stale. Not `arq --check`: that cannot sign in with Entra.
+            exec:
+              command: ["python", "-m", "app.worker.check"]
+            initialDelaySeconds: 60
+            periodSeconds: 60
+            timeoutSeconds: 20
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.worker.resources | nindent 12 }}
+          securityContext:
+            {{- include "ap.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - { name: scratch, mountPath: /tmp }
+      volumes:
+        - name: scratch
+          emptyDir:
+            sizeLimit: {{ .Values.worker.scratch.sizeLimit }}
+      {{- with .Values.worker.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.worker.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.worker.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
