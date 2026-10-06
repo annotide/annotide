@@ -1,0 +1,93 @@
+# promtool unit tests for the chart's alert rules (OPS-4). CI renders the
+# PrometheusRule with ci/full-values.yaml, extracts `.spec` to rules.yaml next
+# to this file and runs `promtool test rules`.
+rule_files:
+  - rules.yaml
+
+evaluation_interval: 1m
+
+tests:
+  - name: a job waiting too long stalls the queue; an idle queue does not
+    interval: 1m
+    input_series:
+      - series: 'annotation_jobs_queued_oldest_age_seconds{job="ns/annotation-worker"}'
+        values: '0x5 700x10'
+      - series: 'annotation_jobs_queued{job="ns/annotation-worker"}'
+        values: '0x15'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: AnnotationQueueStalled
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: AnnotationQueueStalled
+        exp_alerts:
+          - exp_labels: { severity: critical, team: annotation }
+            exp_annotations:
+              summary: "Jobs have waited more than 600 s for a worker"
+              description: "The oldest queued job has waited 11m 40s. Workers are saturated (see worker.autoscaling) or not taking jobs from Redis."
+      - eval_time: 12m
+        alertname: AnnotationNoWorker
+        exp_alerts: []
+
+  - name: no worker reporting at all
+    interval: 1m
+    input_series:
+      - series: 'annotation_jobs_queued{job="annotation-api"}'
+        values: '0x15'
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: AnnotationNoWorker
+        exp_alerts:
+          - exp_labels: { severity: critical, team: annotation }
+            exp_annotations:
+              summary: "No annotation worker is reporting"
+              description: "No backlog gauge for 10 minutes: jobs, outbox publishing, webhooks and lock reaping have stopped, or the collector lost the worker's metrics."
+
+  - name: five percent of API requests failing
+    interval: 1m
+    input_series:
+      - series: 'http_server_request_duration_seconds_count{job="annotation-api", http_response_status_code="200"}'
+        values: '0+90x20'
+      - series: 'http_server_request_duration_seconds_count{job="annotation-api", http_response_status_code="503"}'
+        values: '0+10x20'
+    alert_rule_test:
+      - eval_time: 18m
+        alertname: AnnotationApiErrorRate
+        exp_alerts:
+          - exp_labels: { severity: critical, team: annotation }
+            exp_annotations:
+              summary: More than 5% of API requests fail with a 5xx
+              description: "10% of requests answered 5xx over 5 minutes. Check the API logs (trace ids are in every line) and /api/v1/ready."
+
+  - name: job failures count job runs, not cron ticks
+    interval: 1m
+    input_series:
+      # Healthy crons every minute must not dilute a failing export.
+      - series: 'annotation_worker_job_duration_seconds_count{job="annotation-worker", job_name="publish_outbox_events", outcome="ok"}'
+        values: '0+10x40'
+      - series: 'annotation_worker_job_duration_seconds_count{job="annotation-worker", job_name="export", outcome="error"}'
+        values: '0+1x40'
+      - series: 'annotation_worker_job_duration_seconds_count{job="annotation-worker", job_name="export", outcome="ok"}'
+        values: '0+1x40'
+    alert_rule_test:
+      - eval_time: 35m
+        alertname: AnnotationJobFailureRate
+        exp_alerts:
+          - exp_labels: { severity: warning, team: annotation }
+            exp_annotations:
+              summary: "More than 20% of jobs fail"
+              description: "50% of job runs ended in an error over 15 minutes. The failed jobs' `error` column says why; they can be retried from the UI."
+
+  - name: dead outbox events
+    interval: 1m
+    input_series:
+      - series: 'annotation_outbox_dead{job="annotation-worker"}'
+        values: '0x3 2x10'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: AnnotationOutboxDead
+        exp_alerts:
+          - exp_labels: { severity: warning, team: annotation }
+            exp_annotations:
+              summary: "Outbox events were given up"
+              description: "2 events reached APP_OUTBOX_MAX_ATTEMPTS and will not be published without intervention."

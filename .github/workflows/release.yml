@@ -1,0 +1,298 @@
+# .github/workflows/release.yml — build, sign and publish a tagged release.
+#
+# Triggers on `vX.Y.Z` tags (images, chart, PyPI packages, GitHub Release),
+# plus a `workflow_dispatch` dry run that builds and packages everything but
+# pushes/publishes nothing (no login, no push, no signing, no PyPI upload) —
+# useful to catch a broken Dockerfile or packaging step before cutting a tag.
+#
+# Style and action versions match .github/workflows/ci.yml.
+#
+# ---------------------------------------------------------------------------
+# One-time manual setup (repo owner), required before this workflow can
+# publish anything. None of this is automatable from inside the workflow:
+#
+#   1. GHCR packages must be made public by hand after their first push
+#      (GitHub does not support "create as public" on first push):
+#      https://github.com/orgs/<owner>/packages -> each of
+#      annotide-backend, annotide-frontend, annotide-model and
+#      charts/annotide -> Package settings ->
+#      Change visibility -> Public. Until then `docker pull` / `helm pull`
+#      against them will 403 for anyone without repo access.
+#   2. PyPI trusted publishers: on pypi.org, for both the `annotide` and
+#      `annotide-training` projects (Publishing -> Add a new publisher),
+#      register a GitHub publisher with this repository, workflow filename
+#      `release.yml` and environment name `pypi`. No PyPI API token is used
+#      or stored anywhere (OIDC trusted publishing, pypa/gh-action-pypi-publish).
+#   3. Create a `pypi` GitHub Environment (Settings -> Environments) in this
+#      repo. No secrets needed there; it exists so PyPI's trusted-publisher
+#      registration (above) has a concrete environment to bind to, and so it
+#      can optionally be protected with required reviewers later.
+#
+#   Images and the chart land under ghcr.io/<owner>/... (github.repository_owner,
+#   lowercased), which is ghcr.io/annotide/... in the annotide org; the fixed
+#   names in deploy/personal/, docs/INSTALL.md and infra/helm/annotide/values.yaml
+#   depend on that. A fork publishes under its own owner.
+# ---------------------------------------------------------------------------
+
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch: {}
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  # Resolves the version once so every other job agrees on it, and whether
+  # this run is a dry run (workflow_dispatch: no tag, nothing is pushed).
+  version:
+    name: resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      registry_owner: ${{ steps.v.outputs.registry_owner }}
+      is_dry_run: ${{ github.event_name == 'workflow_dispatch' }}
+    steps:
+      - name: Resolve
+        id: v
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=0.0.0-dryrun" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          fi
+          owner_lower=$(printf '%s' "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "registry_owner=$owner_lower" >> "$GITHUB_OUTPUT"
+
+  # Three images, matrix-built: backend (also the worker), frontend and the
+  # reference model service.
+  images:
+    name: image / ${{ matrix.name }}
+    needs: version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write # cosign keyless signing (OIDC)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: backend
+            context: ./backend
+          - name: frontend
+            context: ./frontend
+          - name: model
+            context: ./model-service
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: needs.version.outputs.is_dry_run != 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ needs.version.outputs.registry_owner }}/annotide-${{ matrix.name }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.licenses=Elastic-2.0
+          tags: |
+            type=semver,pattern={{version}},value=v${{ needs.version.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=v${{ needs.version.outputs.version }}
+            type=semver,pattern={{major}},value=v${{ needs.version.outputs.version }},enable=${{ !startsWith(needs.version.outputs.version, '0.') }}
+            type=raw,value=latest
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          platforms: linux/amd64,linux/arm64
+          push: ${{ needs.version.outputs.is_dry_run != 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+      - name: Install cosign
+        if: needs.version.outputs.is_dry_run != 'true'
+        uses: sigstore/cosign-installer@v3
+
+      # Signs by digest, not by tag (a tag can move; a digest cannot) — the
+      # recommended keyless pattern. `cosign verify` can check it with
+      # `--certificate-identity-regexp` for this repo's release.yml workflow
+      # and `--certificate-oidc-issuer https://token.actions.githubusercontent.com`.
+      - name: Sign image (cosign, keyless)
+        if: needs.version.outputs.is_dry_run != 'true'
+        run: |
+          cosign sign --yes \
+            "${{ env.REGISTRY }}/${{ needs.version.outputs.registry_owner }}/annotide-${{ matrix.name }}@${{ steps.build.outputs.digest }}"
+
+  # Package the Helm chart at the release version, push it to the OCI
+  # registry alongside the images, and sign it the same way.
+  chart:
+    name: helm chart
+    needs: version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # helm and yq are preinstalled on the ubuntu runners (same as ci.yml).
+      - name: Set chart version and appVersion
+        working-directory: infra/helm/annotide
+        run: |
+          v="${{ needs.version.outputs.version }}"
+          yq -i ".version = \"$v\" | .appVersion = \"$v\"" Chart.yaml
+          yq -i "(.annotations.\"artifacthub.io/images\" | from_yaml | .[].image |= sub(\":.*\$\"; \":$v\")) as \$images | .annotations.\"artifacthub.io/images\" = (\$images | to_yaml)" Chart.yaml
+
+      - name: helm lint
+        working-directory: infra/helm
+        run: helm lint annotide -f annotide/ci/full-values.yaml
+
+      - name: helm package
+        working-directory: infra/helm
+        run: helm package annotide --destination ../../dist
+
+      - name: Log in to GHCR (helm)
+        if: needs.version.outputs.is_dry_run != 'true'
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | \
+            helm registry login ${{ env.REGISTRY }} --username ${{ github.actor }} --password-stdin
+
+      - name: helm push
+        id: push
+        if: needs.version.outputs.is_dry_run != 'true'
+        working-directory: dist
+        run: |
+          out=$(helm push "annotide-${{ needs.version.outputs.version }}.tgz" \
+            "oci://${{ env.REGISTRY }}/${{ needs.version.outputs.registry_owner }}/charts" 2>&1 | tee /dev/stderr)
+          digest=$(printf '%s' "$out" | grep -oE 'sha256:[0-9a-f]{64}' | tail -n1)
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Install cosign
+        if: needs.version.outputs.is_dry_run != 'true'
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign chart (cosign, keyless)
+        if: needs.version.outputs.is_dry_run != 'true'
+        run: |
+          cosign sign --yes \
+            "${{ env.REGISTRY }}/${{ needs.version.outputs.registry_owner }}/charts/annotide@${{ steps.push.outputs.digest }}"
+
+      - name: Upload chart artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: chart
+          path: dist/annotide-${{ needs.version.outputs.version }}.tgz
+          retention-days: 7
+
+  # SDK (`annotide`) and training pipeline (`annotide-training`), published
+  # with PyPI trusted publishing — no token stored in this repo. The
+  # `environment: pypi` here must match the environment named in each
+  # project's trusted-publisher registration (see the header comment).
+  pypi:
+    name: pypi / ${{ matrix.package }}
+    needs: version
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      matrix:
+        package: [sdk, training]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Set version from tag
+        working-directory: ${{ matrix.package }}
+        run: |
+          v="${{ needs.version.outputs.version }}"
+          sed -i "s/^version = \".*\"/version = \"$v\"/" pyproject.toml
+          grep -q "version = \"$v\"" pyproject.toml
+
+      # The training package depends on `annotide`, not on a registry index
+      # (sdk/pyproject.toml comment, ci.yml training job): point pip at the
+      # checkout so it does not try to resolve the name on PyPI mid-build.
+      - name: Install build + the sdk (for training)
+        if: matrix.package == 'training'
+        run: pip install build ../sdk
+        working-directory: ${{ matrix.package }}
+
+      - name: Install build
+        if: matrix.package == 'sdk'
+        run: pip install build
+        working-directory: ${{ matrix.package }}
+
+      - name: Build sdist and wheel
+        working-directory: ${{ matrix.package }}
+        run: python -m build
+
+      - name: Publish to PyPI
+        if: needs.version.outputs.is_dry_run != 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: ${{ matrix.package }}/dist
+
+  # GitHub Release with the Personal install files and the packaged chart,
+  # once images, chart and PyPI packages have all succeeded. Skipped
+  # entirely on a dry run: nothing above was actually published.
+  release:
+    name: github release
+    needs: [version, images, chart, pypi]
+    if: needs.version.outputs.is_dry_run != 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download chart artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: chart
+          path: dist
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            deploy/personal/compose.yaml
+            deploy/personal/install.sh
+            dist/annotide-${{ needs.version.outputs.version }}.tgz

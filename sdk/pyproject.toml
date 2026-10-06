@@ -1,0 +1,62 @@
+[project]
+name = "annotide"
+version = "0.1.0"
+description = "Cloud-agnostic annotation platform — Python SDK and CLI (API-3)"
+requires-python = ">=3.12"
+# The SDK is Apache-2.0; the server it talks to is ELv2 (LICENSE.md at the repo root).
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+# One runtime dependency. Models are TypedDicts (plain dicts at runtime), so
+# the SDK never pins pydantic against a customer's ML environment.
+dependencies = [
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+# `annotide mcp`: the MCP server for AI agents (API-8).
+mcp = [
+    "mcp>=2.2,<3",
+]
+dev = [
+    "mcp>=2.2,<3",
+    "pytest>=8.3",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    # Generates annotide/models.py from docs/openapi.json; dev only.
+    "datamodel-code-generator>=0.83",
+]
+
+[project.scripts]
+annotide = "annotide.cli:main"
+
+[build-system]
+requires = ["setuptools>=77"]  # PEP 639 `license` expressions
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["annotide*"]
+
+[tool.setuptools.package-data]
+annotide = ["py.typed"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["annotide", "tests", "tools"]
+# Generated from docs/openapi.json by tools/generate_models.py.
+extend-exclude = ["annotide/models.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "A", "C4", "SIM", "RUF"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["annotide"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unused_ignores = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"

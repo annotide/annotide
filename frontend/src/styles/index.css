@@ -1,0 +1,65 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Design tokens as CSS custom properties, consumed via tailwind.config.js
+ * (`rgb(var(--token) / <alpha-value>)`). Dark is the default theme (UX-7),
+ * tuned for long annotation sessions; `.dark` / light overrides below.
+ *
+ * On the dark surface one blue cannot be both readable as text (it must be
+ * light) and readable behind white text (it must be dark), so `--accent` is
+ * the text/graphic accent and `--accent-fill` the button fill.
+ */
+:root {
+  --surface: 15 17 21; /* page background */
+  --ink: 226 229 233; /* primary text */
+  --muted: 148 155 165; /* secondary text */
+  --line: 42 46 54; /* borders, dividers */
+  --accent: 79 140 255; /* interactive accent: text, focus rings, graphics */
+  --accent-fill: 45 106 227; /* solid fill behind white text: 4.9:1 (WCAG 1.4.3) */
+  --danger: 248 113 113; /* errors: red-400, 6.4:1 on the surface */
+  --success: 74 222 128; /* green-400 */
+  --warning: 251 191 36; /* amber-400 */
+}
+
+:root.dark {
+  --surface: 15 17 21;
+  --ink: 226 229 233;
+  --muted: 148 155 165;
+  --line: 42 46 54;
+  --accent: 79 140 255;
+  --accent-fill: 45 106 227;
+  --danger: 248 113 113;
+  --success: 74 222 128;
+  --warning: 251 191 36;
+}
+
+:root:not(.dark) {
+  --surface: 255 255 255;
+  --ink: 23 25 29;
+  --muted: 100 106 116;
+  --line: 226 229 233;
+  --accent: 37 99 235;
+  --accent-fill: 37 99 235;
+  --danger: 185 28 28; /* red-700: the dark theme's reds are 2.8:1 on white */
+  --success: 21 128 61; /* green-700 */
+  --warning: 180 83 9; /* amber-700 */
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background-color: rgb(var(--surface));
+  color: rgb(var(--ink));
+}
+
+/* Consistent, visible focus rings everywhere (WCAG 2.1 AA). */
+:focus-visible {
+  outline: 2px solid rgb(var(--accent));
+  outline-offset: 2px;
+}

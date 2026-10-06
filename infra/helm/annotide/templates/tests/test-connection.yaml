@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "ap.fullname" . }}-test
+  labels:
+    {{- include "ap.labels" (dict "ctx" . "component" "test") | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext:
+    {{- include "ap.podSecurityContext" (dict "ctx" . "uid" .Values.backend.uid) | nindent 4 }}
+  containers:
+    # Through the frontend's proxy to the API's readiness check: nginx,
+    # backend, database and Redis in one request.
+    - name: ready
+      image: {{ include "ap.image" (dict "ctx" . "image" .Values.image.backend) }}
+      command:
+        - curl
+        - -fsS
+        - http://{{ include "ap.fullname" . }}-frontend:{{ .Values.frontend.service.port }}/api/v1/ready
+      securityContext:
+        {{- include "ap.containerSecurityContext" . | nindent 8 }}

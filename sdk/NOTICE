@@ -1,0 +1,7 @@
+Annotide Python SDK, CLI and MCP server
+Copyright 2026 R Squared Data Solutions (https://annotide.com)
+
+Licensed under the Apache License, Version 2.0 (see LICENSE). The Annotide
+server this SDK talks to is licensed separately, under the Elastic License
+2.0. "Annotide" is a trademark of R Squared Data Solutions; the Apache
+License grants no rights to it (section 6).

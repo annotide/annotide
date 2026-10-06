@@ -1,0 +1,33 @@
+apiVersion: v2
+name: annotide
+description: >-
+  Cloud-agnostic annotation platform: API, worker, web frontend and the
+  reference model service. PostgreSQL and Redis are external.
+type: application
+# Set from the git tag by .github/workflows/release.yml at release time;
+# the values below are the dev/CI placeholder.
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.25.0-0"
+keywords: [annotation, labeling, computer-vision]
+home: https://annotide.com
+sources:
+  - https://github.com/annotide/annotide
+icon: https://annotide.com/favicon.svg
+maintainers:
+  - name: Annotide
+    url: https://annotide.com
+annotations:
+  artifacthub.io/license: Elastic-2.0
+  artifacthub.io/links: |
+    - name: Documentation
+      url: https://annotide.com/docs/helm/
+    - name: Source
+      url: https://github.com/annotide/annotide
+  artifacthub.io/images: |
+    - name: backend
+      image: ghcr.io/annotide/annotide-backend:0.1.0
+    - name: frontend
+      image: ghcr.io/annotide/annotide-frontend:0.1.0
+    - name: model
+      image: ghcr.io/annotide/annotide-model:0.1.0

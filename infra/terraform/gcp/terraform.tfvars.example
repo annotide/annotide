@@ -1,0 +1,16 @@
+# Copy to terraform.tfvars (gitignored) and fill in.
+project_id = "acme-annotation-prod"
+prefix     = "acme"
+region     = "europe-north1"
+public_url = "https://annotate.acme.example"
+
+# Restrict the Kubernetes control plane (recommended).
+api_authorized_ip_ranges = ["203.0.113.0/24"]
+
+# Optional budget: needs the billing account id and Billing Account
+# Administrator (or Costs Manager) on it.
+billing_account       = ""
+budget_amount         = 0
+budget_contact_emails = []
+
+labels = { environment = "prod" }

@@ -1,0 +1,29 @@
+# Dependency updates as pull requests, grouped so a week's bumps arrive as one
+# PR per ecosystem and directory. Security updates (Settings → Code security)
+# arrive on their own, outside this schedule.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directories: ["/backend", "/model-service", "/sdk", "/training"]
+    schedule: { interval: weekly }
+    groups:
+      python:
+        patterns: ["*"]
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule: { interval: weekly }
+    groups:
+      npm:
+        patterns: ["*"]
+  - package-ecosystem: docker
+    directories: ["/backend", "/frontend", "/model-service"]
+    schedule: { interval: weekly }
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    groups:
+      actions:
+        patterns: ["*"]
+  - package-ecosystem: terraform
+    directories: ["/infra/terraform/azure", "/infra/terraform/aws", "/infra/terraform/gcp"]
+    schedule: { interval: monthly }

@@ -1,0 +1,532 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+# Cancel superseded runs on the same ref (OPS-6).
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least-privilege default; jobs that need more (e.g. uploading SBOM
+# artifacts) do not need extra token scopes for that, so this stays as-is
+# for every job below.
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "22"
+
+jobs:
+  backend:
+    name: backend
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: annotation
+          POSTGRES_PASSWORD: annotation_ci_password
+          POSTGRES_DB: annotation
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U annotation -d annotation"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: development
+      APP_DATABASE_URL: postgresql+asyncpg://annotation:annotation_ci_password@localhost:5432/annotation
+      APP_REDIS_URL: redis://localhost:6379/0
+      APP_SECRET_KEY: ci-test-secret-key
+      APP_CORS_ORIGINS: http://localhost:5173
+      APP_LOG_LEVEL: INFO
+      APP_LOG_FORMAT: console
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install backend (dev + otel extras)
+        working-directory: backend
+        run: pip install -e ".[dev,otel]"
+
+      - name: ruff check
+        working-directory: backend
+        run: ruff check .
+
+      - name: ruff format --check
+        working-directory: backend
+        run: ruff format --check .
+
+      - name: mypy
+        working-directory: backend
+        run: mypy app
+
+      # NFR-8 targets 80% backend coverage. --cov-fail-under=80 enforces
+      # that target as a hard gate; treat failures here as "coverage
+      # dropped below the agreed bar", not a build system quirk.
+      - name: pytest (with coverage gate)
+        working-directory: backend
+        run: pytest --cov=app --cov-report=term-missing --cov-fail-under=80
+
+  # Storage connectors, AWS Secrets Manager and webhook delivery against the
+  # compose emulators (Azurite, Moto, fake-gcs-server, an echo receiver):
+  # the same tests as `make integration`, with nothing mocked.
+  integration:
+    name: integration (cloud emulators)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Start the emulators
+        run: docker compose --profile emulators up -d --wait azurite s3 gcs webhook-sink mailpit
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install backend (dev extras)
+        working-directory: backend
+        run: pip install -e ".[dev]"
+
+      - name: pytest (emulators)
+        working-directory: backend
+        env:
+          RUN_INTEGRATION: "1"
+        run: pytest tests/test_integration_emulators.py
+
+      - name: Emulator logs
+        if: failure()
+        run: docker compose --profile emulators logs azurite s3 gcs webhook-sink mailpit
+
+  model-service:
+    # The reference BYOM model service (BYOM-4): its own package and image.
+    name: model-service
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: model-service/pyproject.toml
+
+      - name: Install model-service (dev and llm extras, Tesseract)
+        working-directory: model-service
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr
+          pip install -e ".[dev,llm]"
+
+      - name: ruff
+        working-directory: model-service
+        run: ruff check . && ruff format --check .
+
+      - name: mypy
+        working-directory: model-service
+        run: mypy app tests
+
+      - name: pytest
+        working-directory: model-service
+        run: pytest
+
+  training:
+    # The reference customer-side training pipeline (ML-9): no platform
+    # services, only its own package.
+    name: training
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            training/pyproject.toml
+            sdk/pyproject.toml
+
+      - name: Install training (dev + torch extras)
+        working-directory: training
+        # CPU wheels first: PyPI's Linux torch pulls in the CUDA stack (~2 GB).
+        run: |
+          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          # The SDK first, from the checkout: it is not on a package index,
+          # and resolving the name there could fetch someone else's package.
+          pip install -e ../sdk
+          pip install -e ".[dev,torch,mlflow]"
+
+      - name: ruff
+        working-directory: training
+        run: ruff check . && ruff format --check .
+
+      - name: mypy
+        working-directory: training
+        run: mypy annotide_training tests
+
+      - name: pytest
+        working-directory: training
+        run: pytest
+
+  sdk:
+    # The Python SDK and CLI (API-3): its own package; models generated from
+    # docs/openapi.json, which the backend job keeps in step with the app.
+    name: sdk
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: sdk/pyproject.toml
+
+      - name: Install sdk (dev extras)
+        working-directory: sdk
+        run: pip install -e ".[dev]"
+
+      - name: models match docs/openapi.json
+        working-directory: sdk
+        run: python tools/generate_models.py --check
+
+      - name: ruff
+        working-directory: sdk
+        run: ruff check . && ruff format --check .
+
+      - name: mypy
+        working-directory: sdk
+        run: mypy annotide tests tools
+
+      - name: pytest
+        working-directory: sdk
+        run: pytest
+
+  frontend:
+    name: frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: npm ci
+        working-directory: frontend
+        run: npm ci
+
+      - name: Type check
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Unit tests
+        working-directory: frontend
+        run: npm run test
+
+  # End-to-end (NFR-8): the real backend stack in compose, seeded with the
+  # demo project, and Playwright driving the working-tree frontend through
+  # the Vite dev server. The compose `frontend` image is not built here; the
+  # `docker` job covers that.
+  e2e:
+    name: e2e
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: npm ci
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      # keys.py trusts only the production key, so without a licence the stack
+      # is Community and the quality, SSO and SCIM specs would get 402. A
+      # throwaway key the stack trusts, and a Business licence signed with it
+      # (dev only, never published).
+      - name: Dev licence
+        run: make dev-licence
+
+      # `model` too: the seed registers it (http://model:9000), and the smart
+      # polygon, pre-label and PDF pre-label specs call it.
+      - name: Start the backend stack
+        run: >-
+          docker compose -f docker-compose.yml -f .dev/compose.licence.yml
+          up -d --build --wait postgres redis azurite backend worker model
+
+      - name: Seed the demo project
+        run: make seed
+
+      - name: Playwright
+        working-directory: frontend
+        env:
+          VITE_API_PROXY_TARGET: http://localhost:8000
+        run: npx playwright test
+
+      # Keeps the k6 scripts working against the current API; a smoke run
+      # measures nothing about capacity (loadtest/README.md).
+      - name: Load test (smoke)
+        run: make loadtest PROFILE=smoke
+
+      - name: Upload report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+          retention-days: 7
+
+      - name: Stack logs
+        if: failure()
+        run: docker compose logs --no-color --tail=200 backend worker
+
+      - name: Stop the stack
+        if: always()
+        run: docker compose down
+
+  helm:
+    name: helm chart
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # helm is preinstalled on the ubuntu runners; kubeconform runs from its image.
+      - name: helm lint
+        working-directory: infra/helm
+        run: |
+          for values in annotide/ci/*.yaml; do
+            helm lint annotide -f "$values"
+          done
+
+      - name: kubeconform (strict)
+        working-directory: infra/helm
+        run: |
+          for values in annotide/ci/*.yaml; do
+            helm template ci annotide -f "$values" \
+              | docker run --rm -i ghcr.io/yannh/kubeconform:v0.6.7 -strict -summary -kubernetes-version 1.29.0 \
+                  -schema-location default \
+                  -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
+          done
+
+      # The alert rules (OPS-4) against synthetic series: tests/alerts.test.yaml.
+      - name: promtool test rules
+        working-directory: infra/helm
+        run: |
+          helm template ci annotide -f annotide/ci/full-values.yaml \
+              --show-only templates/prometheusrule.yaml \
+            | yq '.spec' > tests/rules.yaml
+          docker run --rm -v "$PWD/tests":/r -w /r --entrypoint promtool prom/prometheus:v3.15.0 \
+            test rules alerts.test.yaml
+
+  # Terraform for Azure, AWS and Google Cloud (§15, SEC-1) and the Entra app
+  # registration: format, validate (no backend, nothing applied) and a Trivy
+  # misconfiguration scan.
+  terraform:
+    name: terraform
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: terraform fmt
+        run: terraform fmt -check -recursive infra
+
+      - name: terraform validate
+        run: |
+          for dir in infra/terraform/azure infra/terraform/aws infra/terraform/gcp infra/entra; do
+            terraform -chdir="$dir" init -backend=false -input=false
+            terraform -chdir="$dir" validate
+          done
+
+      - name: Trivy misconfiguration scan
+        run: |
+          for dir in infra/terraform/azure infra/terraform/aws infra/terraform/gcp; do
+            docker run --rm -v "$PWD/$dir:/src" aquasec/trivy:0.67.2 \
+              config --exit-code 1 --severity HIGH,CRITICAL /src
+          done
+
+  security:
+    name: security
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Trivy and Syft run from their images: the pinned action versions
+      # (trivy-action@0.24.0, sbom-action@v0.17) no longer resolve, and the
+      # job failed at setup on every run. Pin image digests once they settle.
+      - name: Trivy filesystem scan
+        run: >-
+          docker run --rm -v "$PWD:/src" -w /src aquasec/trivy:latest
+          fs --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 .
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Python dependency audit (backend)
+        working-directory: backend
+        run: |
+          # Optional extras too: an image built with them ships them.
+          pip install -e ".[dev,otel,mlflow,keyvault,gcp-secrets]"
+          pip install pip-audit
+          pip-audit
+        continue-on-error: true # advisory for the Phase-1 skeleton; tighten once deps stabilise
+
+      - name: Generate SBOM (SEC-5)
+        run: >-
+          docker run --rm -v "$PWD:/src" anchore/syft:latest
+          dir:/src -o cyclonedx-json > sbom.cyclonedx.json
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.cyclonedx.json
+          retention-days: 30
+
+  docker:
+    name: docker
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image (also runs as the worker)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: false
+          tags: annotide-backend:ci
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+
+      - name: Build frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: false
+          tags: annotide-frontend:ci
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+
+      # Images are only pushed on a version tag (v*), and only once a
+      # registry + credentials are actually configured for this repo.
+      # Left commented out deliberately: flip on and wire up
+      # `docker/login-action` + a real registry when Phase-1 ships. Also
+      # add `permissions: packages: write` to this job at that point.
+      # - name: Log in to registry
+      #   if: startsWith(github.ref, 'refs/tags/v')
+      #   uses: docker/login-action@v3
+      #   with:
+      #     registry: ghcr.io
+      #     username: ${{ github.actor }}
+      #     password: ${{ secrets.GITHUB_TOKEN }}
+      #
+      # - name: Push backend image
+      #   if: startsWith(github.ref, 'refs/tags/v')
+      #   uses: docker/build-push-action@v6
+      #   with:
+      #     context: ./backend
+      #     push: true
+      #     tags: ghcr.io/${{ github.repository }}/backend:${{ github.ref_name }}
+      #     cache-from: type=gha,scope=backend
+      #
+      # (repeat for the frontend image; the worker runs the backend image)
+
+  # Personal install (deploy/personal/): lint install.sh and sanity-check
+  # the Compose file it downloads. The build-and-publish pipeline is
+  # .github/workflows/release.yml.
+  personal-install:
+    name: personal install
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: shellcheck install.sh
+        run: >-
+          docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:stable
+          deploy/personal/install.sh
+
+      - name: docker compose config
+        working-directory: deploy/personal
+        env:
+          # Just enough to satisfy the required `${VAR:?...}` interpolations
+          # in compose.yaml; install.sh generates real values at install time.
+          POSTGRES_PASSWORD: ci-placeholder
+          APP_SECRET_KEY: ci-placeholder
+          APP_INSTALL_ID: ci-placeholder
+        run: docker compose -f compose.yaml config -q

@@ -1,0 +1,155 @@
+# deploy/personal/compose.yaml — Annotide quick install.
+#
+# Downloaded by install.sh (https://annotide.com/install.sh) to
+# ${ANNOTIDE_DIR:-$HOME/annotide}/compose.yaml. Every image is published,
+# multi-arch (linux/amd64, linux/arm64) and pulled from GHCR — nothing here
+# is built locally. See README.md in this directory for configuration,
+# upgrade and uninstall instructions, and ../../docs/INSTALL.md for the full
+# administrator guide (the Helm chart under infra/helm/annotide is the
+# production/Kubernetes path).
+#
+# Override the registry/tag to test against locally built images:
+#   ANNOTIDE_REGISTRY=annotide-personal-test ANNOTIDE_VERSION=test docker compose ...
+#
+# Storage: the "local" connector, bind-mounted at ./data. After signing in,
+# register a Connector with type "local" and root "/data" (or a subdirectory
+# of it) under Settings -> Connectors, then point a project's source/result
+# connector at it. The platform never proxies media through anything else;
+# with real cloud storage instead, point a connector at that and the bind
+# mount below can be removed.
+
+name: annotide
+
+x-app-env: &app-env
+  APP_ENV: ${APP_ENV:-production}
+  APP_DATABASE_URL: postgresql+asyncpg://annotide:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (install.sh does this for you)}@postgres:5432/annotide
+  APP_REDIS_URL: redis://redis:6379/0
+  APP_SECRET_KEY: ${APP_SECRET_KEY:?Set APP_SECRET_KEY in .env (install.sh does this for you)}
+  APP_SECRET_KEY_PREVIOUS: ${APP_SECRET_KEY_PREVIOUS:-}
+  APP_SIGNED_URL_TTL: ${APP_SIGNED_URL_TTL:-900}
+  # How the bundled model service reaches the API for local-disk media.
+  APP_INTERNAL_API_URL: http://backend:8000
+  APP_CORS_ORIGINS: ${APP_CORS_ORIGINS:-http://localhost:${ANNOTIDE_PORT:-8080}}
+  APP_FRONTEND_URL: ${APP_FRONTEND_URL:-http://localhost:${ANNOTIDE_PORT:-8080}}
+  APP_TRUSTED_PROXIES: ${APP_TRUSTED_PROXIES:-}
+  # Off by default (SEC-4): turn on only if you deliberately point a webhook
+  # at something on this machine's private network.
+  APP_WEBHOOK_ALLOW_PRIVATE_URLS: ${APP_WEBHOOK_ALLOW_PRIVATE_URLS:-false}
+  APP_SMTP_HOST: ${APP_SMTP_HOST:-}
+  APP_SMTP_PORT: ${APP_SMTP_PORT:-587}
+  APP_SMTP_SECURITY: ${APP_SMTP_SECURITY:-starttls}
+  APP_SMTP_USERNAME: ${APP_SMTP_USERNAME:-}
+  APP_SMTP_PASSWORD: ${APP_SMTP_PASSWORD:-}
+  APP_SMTP_FROM: ${APP_SMTP_FROM:-Annotide <noreply@localhost>}
+  # Licensing and telemetry (LIC-6, LIC-9, LIC-16, LIC-21, LIC-27, LIC-28):
+  # an unset APP_LICENSE_KEY runs the Community edition (up to three users).
+  # The heartbeat is on by default and sends only salted hashes, never to
+  # anywhere but APP_LICENSE_SERVER_URL; see docs/LICENSING.md and this
+  # folder's README to turn it off (APP_TELEMETRY_ENABLED=false in .env).
+  # APP_LICENSE_SERVER_URL= (set but empty) turns off every licence-server call.
+  APP_LICENSE_KEY: ${APP_LICENSE_KEY:-}
+  APP_INSTALL_ID: ${APP_INSTALL_ID:?Set APP_INSTALL_ID in .env (install.sh does this for you)}
+  APP_LICENSE_SERVER_URL: ${APP_LICENSE_SERVER_URL-https://licence.annotide.com}
+  APP_LICENSE_REFRESH_ENABLED: ${APP_LICENSE_REFRESH_ENABLED:-true}
+  APP_TELEMETRY_ENABLED: ${APP_TELEMETRY_ENABLED:-true}
+  APP_LOG_LEVEL: ${APP_LOG_LEVEL:-INFO}
+  APP_LOG_FORMAT: ${APP_LOG_FORMAT:-json}
+  APP_OTEL_ENABLED: "false"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: annotide
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (install.sh does this for you)}
+      POSTGRES_DB: annotide
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U annotide -d annotide"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  # API. Runs migrations once, synchronously, before it starts serving
+  # (same command as docker-compose.yml / the Helm migration hook).
+  backend:
+    image: ${ANNOTIDE_REGISTRY:-ghcr.io/annotide}/annotide-backend:${ANNOTIDE_VERSION:-latest}
+    restart: unless-stopped
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    environment: *app-env
+    volumes:
+      - ./data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Same image and code as the API, different process (app/worker/).
+  worker:
+    image: ${ANNOTIDE_REGISTRY:-ghcr.io/annotide}/annotide-backend:${ANNOTIDE_VERSION:-latest}
+    restart: unless-stopped
+    command: arq app.worker.main.WorkerSettings
+    # Longer than APP_TASK_LOCK_TTL's shutdown wait, so a running job can
+    # finish or go back to the queue before the container is killed.
+    stop_grace_period: 60s
+    environment: *app-env
+    volumes:
+      - ./data:/data
+    # The image's own HEALTHCHECK probes the API on :8000, which this
+    # process never serves; arq keeps a heartbeat key in Redis instead.
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.worker.check"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    image: ${ANNOTIDE_REGISTRY:-ghcr.io/annotide}/annotide-frontend:${ANNOTIDE_VERSION:-latest}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${ANNOTIDE_PORT:-8080}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # Reference BYOM model service: offline heuristic pre-labelling with no
+  # weights and no GPU. Off by default; add `COMPOSE_PROFILES=models` to
+  # .env to start it, or register your own model endpoint in the UI instead.
+  model:
+    image: ${ANNOTIDE_REGISTRY:-ghcr.io/annotide}/annotide-model:${ANNOTIDE_VERSION:-latest}
+    restart: unless-stopped
+    profiles: ["models"]
+    environment:
+      MODEL_BACKEND: ${MODEL_BACKEND:-heuristic}
+      MODEL_PATH: ${MODEL_PATH:-}
+      # Optional bearer key for every route but /health and /ready. Empty = open.
+      MODEL_API_KEY: ${MODEL_API_KEY:-}
+      OCR_ENGINE: ${OCR_ENGINE:-auto}
+      OCR_LANGUAGES: ${OCR_LANGUAGES:-eng}
+
+volumes:
+  postgres_data:
+  redis_data:

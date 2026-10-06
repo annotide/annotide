@@ -1,0 +1,47 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "ap.fullname" . }}
+  labels:
+    {{- include "ap.labels" (dict "ctx" . "component" "ingress") | nindent 4 }}
+  {{- $annotations := .Values.ingress.annotations | default dict }}
+  {{- with .Values.ingress.clusterIssuer }}
+  {{- $annotations = merge (dict "cert-manager.io/cluster-issuer" .) $annotations }}
+  {{- end }}
+  {{- with $annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- if .Values.ingress.tls }}
+  tls:
+    {{- toYaml .Values.ingress.tls | nindent 4 }}
+  {{- else if .Values.ingress.clusterIssuer }}
+  # cert-manager issues this certificate for every host (clusterIssuer).
+  tls:
+    - secretName: {{ include "ap.fullname" . }}-tls
+      hosts:
+        {{- range .Values.ingress.hosts }}
+        - {{ .host | quote }}
+        {{- end }}
+  {{- end }}
+  rules:
+    {{- range .Values.ingress.hosts }}
+    # Everything goes to the frontend, whose nginx proxies /api/ to the API:
+    # one origin, so no CORS and the CSP stays 'self'.
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "ap.fullname" $ }}-frontend
+                port:
+                  name: http
+    {{- end }}
+{{- end }}

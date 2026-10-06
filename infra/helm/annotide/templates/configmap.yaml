@@ -1,0 +1,53 @@
+{{- $public := include "ap.publicUrl" . -}}
+{{- $config := dict "APP_ENV" "production" "APP_LICENSE_SERVER_URL" "https://licence.annotide.com" -}}
+{{- /* How a model service reaches the API for local / proxied media URLs. */ -}}
+{{- $_ := set $config "APP_INTERNAL_API_URL" (printf "http://%s:%v" (include "ap.backendHost" .) .Values.backend.service.port) -}}
+{{- if $public -}}
+{{- $_ := set $config "APP_FRONTEND_URL" $public -}}
+{{- $_ := set $config "APP_CORS_ORIGINS" $public -}}
+{{- $_ := set $config "APP_PUBLIC_HOSTNAME" (regexReplaceAll "^https?://([^/:]+).*$" $public "${1}") -}}
+{{- end -}}
+{{- with .Values.oidc -}}
+{{- if .issuer -}}
+{{- $_ := set $config "APP_OIDC_ISSUER" .issuer -}}
+{{- $_ := set $config "APP_OIDC_CLIENT_ID" (required "oidc.clientId is required with oidc.issuer" .clientId) -}}
+{{- $_ := set $config "APP_OIDC_DISPLAY_NAME" .displayName -}}
+{{- $_ := set $config "APP_OIDC_GROUPS_CLAIM" .groupsClaim -}}
+{{- if .organizationSlug }}{{ $_ := set $config "APP_OIDC_ORGANIZATION_SLUG" .organizationSlug }}{{ end -}}
+{{- if .adminGroups }}{{ $_ := set $config "APP_OIDC_ADMIN_GROUPS" .adminGroups }}{{ end -}}
+{{- if .trustUnverifiedEmail }}{{ $_ := set $config "APP_OIDC_TRUST_UNVERIFIED_EMAIL" "true" }}{{ end -}}
+{{- if $public }}{{ $_ := set $config "APP_OIDC_REDIRECT_URI" (printf "%s/api/v1/auth/oidc/callback" $public) }}{{ end -}}
+{{- end -}}
+{{- end -}}
+{{- with .Values.smtp -}}
+{{- if .host -}}
+{{- $_ := set $config "APP_SMTP_HOST" .host -}}
+{{- $_ := set $config "APP_SMTP_PORT" (toString .port) -}}
+{{- $_ := set $config "APP_SMTP_SECURITY" .security -}}
+{{- $_ := set $config "APP_SMTP_FROM" .from -}}
+{{- if .username }}{{ $_ := set $config "APP_SMTP_USERNAME" .username }}{{ end -}}
+{{- end -}}
+{{- end -}}
+{{- if .Values.otel.enabled -}}
+{{- $_ := set $config "APP_OTEL_ENABLED" "true" -}}
+{{- $_ := set $config "OTEL_EXPORTER_OTLP_ENDPOINT" .Values.otel.endpoint -}}
+{{- end -}}
+{{- /* A stable install id for the heartbeat and the trial (LIC-16): kept from the
+live ConfigMap across upgrades, generated on first install. `helm template`
+(GitOps) cannot look it up, so set config.APP_INSTALL_ID there. */ -}}
+{{- $live := lookup "v1" "ConfigMap" .Release.Namespace (printf "%s-config" (include "ap.fullname" .)) -}}
+{{- $_ := set $config "APP_INSTALL_ID" (dig "data" "APP_INSTALL_ID" (uuidv4) ($live | default dict)) -}}
+{{- /* Explicit `config` entries win over everything derived above. */ -}}
+{{- $config = mergeOverwrite $config (.Values.config | default dict) -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ap.fullname" . }}-config
+  labels:
+    {{- include "ap.labels" (dict "ctx" . "component" "config") | nindent 4 }}
+data:
+  {{- range $key, $value := $config }}
+  {{- if ne (toString $value) "" }}
+  {{ $key }}: {{ toString $value | quote }}
+  {{- end }}
+  {{- end }}

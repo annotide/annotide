@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+*.egg-info/
+
+# Node
+node_modules/
+frontend/dist/
+.vite/
+*.tsbuildinfo
+playwright-report/
+test-results/
+frontend/e2e/.auth/
+
+# Secrets and local config — never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+# ...but not the source package of that name (it was never committed, CI broke).
+!backend/app/services/secrets/
+
+# Local data
+data/
+# `make dev-licence`: a throwaway signing key's keys.py and compose override
+.dev/
+.DS_Store
+
+# Terraform (infra/entra): state and tfvars hold secrets
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars

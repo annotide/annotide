@@ -1,0 +1,27 @@
+# Copy to terraform.tfvars (gitignored) and fill in.
+prefix     = "acme"
+location   = "swedencentral"
+public_url = "https://annotate.acme.example"
+
+# Entra object ids: who runs kubectl / helm, and who manages Key Vault secrets.
+cluster_admin_object_ids   = ["00000000-0000-0000-0000-000000000000"]
+key_vault_admin_object_ids = ["00000000-0000-0000-0000-000000000000"]
+# Who signs in to PostgreSQL for backups and psql (Entra only, no password).
+postgres_admins = {
+  "you@example.com" = { object_id = "00000000-0000-0000-0000-000000000000", principal_type = "User" }
+}
+
+# Restrict the Kubernetes API server (recommended).
+api_authorized_ip_ranges = ["203.0.113.0/24"]
+
+# Browsers fetch media straight from storage (ARC-3): their public IPs or
+# CIDRs, or [] for anyone (signed URLs still required). No /31 or /32.
+storage_allowed_ip_ranges = []
+
+# Who manages Key Vault secrets and reaches PostgreSQL directly (backups).
+admin_ip_ranges = ["203.0.113.7/32"]
+
+budget_amount         = 0
+budget_contact_emails = []
+
+tags = { environment = "prod" }

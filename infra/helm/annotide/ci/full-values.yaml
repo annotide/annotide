@@ -1,0 +1,54 @@
+# Every optional feature on, for `helm lint` / kubeconform in CI.
+publicUrl: https://annotate.example.com
+database:
+  url: postgresql+asyncpg://annotation:pw@postgres:5432/annotation
+redis:
+  url: redis://redis:6379/0
+secrets:
+  secretKey: ci-only-not-a-real-key-0123456789abcdef
+  oidcClientSecret: ci-secret
+  licenseKey: ci-licence
+  extra:
+    APP_LICENSE_FINGERPRINT_SALT: ci-salt
+oidc:
+  issuer: https://login.example.com/realms/annotation
+  clientId: annotide
+  adminGroups: platform-admins
+otel:
+  enabled: true
+model:
+  enabled: true
+backend:
+  autoscaling:
+    enabled: true
+worker:
+  autoscaling:
+    enabled: true
+alerts:
+  enabled: true
+  labels:
+    release: kube-prometheus-stack
+  extraAlertLabels:
+    team: annotation
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: annotate.example.com
+  tls:
+    - secretName: annotate-tls
+      hosts: [annotate.example.com]
+config:
+  APP_TRUSTED_PROXIES: 10.0.0.0/8
+networkPolicy:
+  enabled: true
+  ingressFrom:
+    - namespaceSelector:
+        matchLabels: { kubernetes.io/metadata.name: ingress-nginx }
+  backendExtraFrom:
+    - namespaceSelector:
+        matchLabels: { kubernetes.io/metadata.name: monitoring }
+
+# AKS workload identity (infra/terraform/azure) labels every pod.
+podLabels:
+  azure.workload.identity/use: "true"

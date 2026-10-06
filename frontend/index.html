@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Annotide</title>
+  </head>
+  <script>
+      // Apply the saved theme before first paint, otherwise the page renders in
+      // the default theme and visibly flips once React mounts.
+      (function () {
+        try {
+          var saved = JSON.parse(localStorage.getItem('annotation.ui') || '{}');
+          var theme = saved.theme === 'light' ? 'light' : 'dark';
+          document.documentElement.classList.toggle('dark', theme === 'dark');
+          document.documentElement.style.colorScheme = theme;
+        } catch (e) {
+          document.documentElement.classList.add('dark');
+        }
+      })();
+    </script>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,35 @@
+# Version control
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+.venv/
+venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Tests (not needed in the runtime image)
+tests/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Env files — never bake secrets into the image
+.env
+.env.*
+!.env.example
+
+# Docker
+Dockerfile
+.dockerignore

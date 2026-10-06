@@ -1,0 +1,21 @@
+{{- range $component := list "backend" "frontend" }}
+{{- $values := index $.Values $component }}
+{{- $replicas := $values.replicas }}
+{{- if dig "autoscaling" "enabled" false $values }}
+{{- $replicas = $values.autoscaling.minReplicas }}
+{{- end }}
+{{- if and $values.pdb.enabled (gt (int $replicas) 1) }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "ap.fullname" $ }}-{{ $component }}
+  labels:
+    {{- include "ap.labels" (dict "ctx" $ "component" $component) | nindent 4 }}
+spec:
+  minAvailable: {{ $values.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "ap.selectorLabels" (dict "ctx" $ "component" $component) | nindent 6 }}
+{{- end }}
+{{- end }}

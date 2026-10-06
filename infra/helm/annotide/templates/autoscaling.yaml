@@ -1,0 +1,87 @@
+{{- /* Autoscaling (OPS-5): the API on CPU, the worker on the job backlog (KEDA). */}}
+{{- if .Values.backend.autoscaling.enabled }}
+{{- $as := .Values.backend.autoscaling }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "ap.fullname" . }}-backend
+  labels:
+    {{- include "ap.labels" (dict "ctx" . "component" "backend") | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "ap.fullname" . }}-backend
+  minReplicas: {{ $as.minReplicas }}
+  maxReplicas: {{ $as.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ $as.targetCPUUtilizationPercentage }}
+{{- end }}
+{{- if .Values.worker.autoscaling.enabled }}
+{{- $as := .Values.worker.autoscaling }}
+{{- if lt (int $as.minReplicas) 1 }}
+{{- fail "worker.autoscaling.minReplicas must be at least 1: the worker runs the cron jobs" }}
+{{- end }}
+{{- $secretName := printf "%s-keda" (include "ap.fullname" .) }}
+{{- if .Values.secrets.existingSecret }}
+{{- $secretName = .Values.secrets.existingSecret }}
+{{- else }}
+---
+# The scaler's own connection string, kept out of the pods' environment.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $secretName }}
+  labels:
+    {{- include "ap.labels" (dict "ctx" . "component" "worker") | nindent 4 }}
+type: Opaque
+stringData:
+  {{ $as.postgresConnectionKey }}: {{ default (replace "postgresql+asyncpg://" "postgresql://" (required "database.url is required" .Values.database.url)) $as.postgresConnection | quote }}
+{{- end }}
+---
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: {{ include "ap.fullname" . }}-worker
+  labels:
+    {{- include "ap.labels" (dict "ctx" . "component" "worker") | nindent 4 }}
+spec:
+  secretTargetRef:
+    - parameter: connection
+      name: {{ $secretName }}
+      key: {{ $as.postgresConnectionKey }}
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "ap.fullname" . }}-worker
+  labels:
+    {{- include "ap.labels" (dict "ctx" . "component" "worker") | nindent 4 }}
+spec:
+  scaleTargetRef:
+    name: {{ include "ap.fullname" . }}-worker
+  minReplicaCount: {{ $as.minReplicas }}
+  maxReplicaCount: {{ $as.maxReplicas }}
+  pollingInterval: {{ $as.pollingInterval }}
+  cooldownPeriod: {{ $as.cooldownPeriod }}
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: {{ $as.cooldownPeriod }}
+          policies:
+            - { type: Pods, value: 1, periodSeconds: 60 }
+  triggers:
+    # The `job` row is the source of truth; Redis only carries ids.
+    - type: postgresql
+      metadata:
+        query: "SELECT count(*) FROM job WHERE status IN ('queued', 'running')"
+        targetQueryValue: {{ $as.jobsPerReplica | quote }}
+      authenticationRef:
+        name: {{ include "ap.fullname" . }}-worker
+{{- end }}

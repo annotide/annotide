@@ -1,0 +1,48 @@
+{
+  "title": "Users",
+  "adminOnly": "The user directory is for system administrators.",
+  "search": "Search",
+  "searchPlaceholder": "E-mail or name",
+  "hint": "People only; service accounts are on the API keys page. Showing at most 100.",
+  "loading": "Loading users…",
+  "loadError": "Could not load users",
+  "noMatch": "No users match",
+  "noMatchHint": "Try another search.",
+  "listLabel": "Users",
+  "badge": {
+    "admin": "admin",
+    "erased": "erased {{date}}",
+    "inactive": "inactive",
+    "you": "you"
+  },
+  "lastSeen": "Last seen {{when}}",
+  "erase": {
+    "open": "Erase…",
+    "openLabel": "Erase {{email}}",
+    "formLabel": "Erase {{email}}",
+    "explain": "Erasure pseudonymises this person: their e-mail and name are replaced, sign-in and API keys stop working, memberships are removed and their open tasks return to the queue. Annotations they made stay, under an anonymous id. <strong>This cannot be undone.</strong>",
+    "confirm": "Type <code>{{email}}</code> to confirm",
+    "redactComments": "Also replace the text of their comments with “[erased]”",
+    "failed": "Could not erase: {{message}}",
+    "submit": "Erase permanently",
+    "submitting": "Erasing…"
+  },
+  "scim": {
+    "heading": "SCIM provisioning",
+    "on": "on",
+    "off": "off",
+    "description": "Let your identity provider (Entra ID, Okta, …) create, update and deactivate accounts and push groups before anyone signs in. Groups grant project roles through each project's single sign-on group mapping. Enter the tenant URL and token in the provider's provisioning settings.",
+    "enable": "Turn on SCIM",
+    "newToken": "New token",
+    "newTokenHint": "The token was shown once when it was made. A new token replaces it; update the provider afterwards.",
+    "disable": "Turn off SCIM",
+    "failed": "Could not change SCIM: {{message}}",
+    "revealTitle": "Copy these into your identity provider now. The token is not shown again.",
+    "baseUrl": "Tenant URL",
+    "token": "Secret token",
+    "reveal": "Show token",
+    "hide": "Hide token",
+    "copyToken": "Copy token",
+    "done": "Done"
+  }
+}
