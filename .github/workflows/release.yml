@@ -18,17 +18,20 @@
 #      charts/annotide -> Package settings ->
 #      Change visibility -> Public. Until then `docker pull` / `helm pull`
 #      against them will 403 for anyone without repo access.
-#    2. PyPI trusted publishers: on pypi.org, register a GitHub publisher with
+#   2. PyPI trusted publishers: on pypi.org, register a GitHub publisher with
 #      this repository and workflow filename `release.yml` for each project:
 #      `annotide` with environment name `pypi`, `annotide-training` with
 #      environment name `pypi-training`. Before a project's first release it
 #      does not exist yet, so add it as a *pending* publisher (Account
 #      settings -> Publishing). PyPI refuses two pending publishers with
-#      identical claims, hence one environment per project. ...
-#    3. Create `pypi` and `pypi-training` GitHub Environments
-#      repo. No secrets needed there; it exists so PyPI's trusted-publisher
-#      registration (above) has a concrete environment to bind to, and so it
-#      can optionally be protected with required reviewers later.
+#      identical claims, hence one environment per project. No PyPI API
+#      token is used or stored anywhere (OIDC trusted publishing,
+#      pypa/gh-action-pypi-publish).
+#   3. Create `pypi` and `pypi-training` GitHub Environments (Settings ->
+#      Environments) in this repo. No secrets needed there; they exist so
+#      PyPI's trusted-publisher registrations (above) have a concrete
+#      environment to bind to, and so they can be protected with required
+#      reviewers.
 #
 #   Images and the chart land under ghcr.io/<owner>/... (github.repository_owner,
 #   lowercased), which is ghcr.io/annotide/... in the annotide org; the fixed
@@ -198,7 +201,8 @@ jobs:
             "oci://${{ env.REGISTRY }}/${{ needs.version.outputs.registry_owner }}/charts" 2>&1 | tee /dev/stderr)
           digest=$(printf '%s' "$out" | grep -oE 'sha256:[0-9a-f]{64}' | tail -n1)
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
-      
+
+      # cosign reads Docker's credential store, not helm's registry config.
       - name: Log in to GHCR (cosign)
         if: needs.version.outputs.is_dry_run != 'true'
         uses: docker/login-action@v3
@@ -206,7 +210,6 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
 
       - name: Install cosign
         if: needs.version.outputs.is_dry_run != 'true'
@@ -225,11 +228,12 @@ jobs:
           path: dist/annotide-${{ needs.version.outputs.version }}.tgz
           retention-days: 7
 
+  # SDK (`annotide`) and training pipeline (`annotide-training`), published
   # with PyPI trusted publishing — no token stored in this repo. Each
   # package publishes from its own environment (`pypi` / `pypi-training`),
   # which must match the environment named in that project's
   # trusted-publisher registration (see the header comment).
-pypi:
+  pypi:
     name: pypi / ${{ matrix.package }}
     needs: version
     runs-on: ubuntu-latest
