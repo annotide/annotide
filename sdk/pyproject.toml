@@ -1,11 +1,27 @@
 [project]
 name = "annotide"
 version = "0.1.0"
-description = "Cloud-agnostic annotation platform — Python SDK and CLI (API-3)"
+description = "Python SDK, CLI and MCP server for the Annotide annotation platform"
+readme = "README.md"
 requires-python = ">=3.12"
 # The SDK is Apache-2.0; the server it talks to is ELv2 (LICENSE.md at the repo root).
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Annotide" }]
+keywords = ["annotation", "labeling", "computer-vision", "dataset", "mlops", "sdk", "mcp"]
+# No `License ::` classifiers: PEP 639 `license` expressions replace them.
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+    "Typing :: Typed",
+]
 # One runtime dependency. Models are TypedDicts (plain dicts at runtime), so
 # the SDK never pins pydantic against a customer's ML environment.
 dependencies = [
@@ -25,6 +41,13 @@ dev = [
     # Generates annotide/models.py from docs/openapi.json; dev only.
     "datamodel-code-generator>=0.83",
 ]
+
+[project.urls]
+Homepage = "https://annotide.com"
+Documentation = "https://github.com/annotide/annotide/tree/main/sdk#readme"
+Source = "https://github.com/annotide/annotide/tree/main/sdk"
+Issues = "https://github.com/annotide/annotide/issues"
+Changelog = "https://github.com/annotide/annotide/releases"
 
 [project.scripts]
 annotide = "annotide.cli:main"

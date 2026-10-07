@@ -5,7 +5,7 @@ runtime dependency (`httpx`); responses are plain dicts typed with
 `TypedDict`s generated from the API's OpenAPI document.
 
 ```sh
-pip install -e sdk            # from a checkout; not on a package index yet
+pip install annotide          # or `pip install -e sdk` from a checkout
 export ANNOTIDE_URL=https://annotate.example.com
 export ANNOTIDE_API_KEY=... # Settings → API keys; use a service account for CI
 ```
