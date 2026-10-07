@@ -7,7 +7,10 @@
 # ---------------------------------------------------------------------------
 # Build
 # ---------------------------------------------------------------------------
-FROM node:22-alpine AS build
+# Pinned to the build machine's platform: dist/ is plain static files, the
+# same for every target, so a multi-arch build runs npm natively once
+# instead of under QEMU (where Node crashes with "Illegal instruction").
+FROM --platform=$BUILDPLATFORM node:22-alpine AS build
 
 WORKDIR /app
 
