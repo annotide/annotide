@@ -36,7 +36,7 @@ is the trainer's business; the platform only stores the lineage.
 ```sh
 cd training
 python3.12 -m venv .venv
-.venv/bin/pip install -e ../sdk     # first: the SDK is not on a package index
+.venv/bin/pip install -e ../sdk     # first: the local SDK, not the PyPI release
 .venv/bin/pip install -e '.[dev]'
 
 export ANNOTIDE_API_URL=http://localhost:8000   # site root, not /api/v1

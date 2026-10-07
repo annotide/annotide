@@ -1,13 +1,30 @@
 [project]
 name = "annotide-training"
 version = "0.1.0"
-description = "Cloud-agnostic annotation platform — reference customer-side training pipeline (ML-9, EXP-8)"
+description = "Reference training pipeline for the Annotide annotation platform, run on your own compute"
+readme = "README.md"
 requires-python = ">=3.12"
+# ELv2 like the rest of the repo; only sdk/ is Apache-2.0 (LICENSE.md at the root).
+license = "Elastic-2.0"
+license-files = ["LICENSE.md"]
+authors = [{ name = "Annotide" }]
+keywords = ["annotation", "training", "computer-vision", "mlops", "onnx", "mlflow"]
+# No `License ::` classifiers: PEP 639 `license` expressions replace them.
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+]
 # The platform never trains (ML-9); this runs on the customer's side. The
 # pipeline talks to the platform through the SDK (../sdk, API-3) — a real
 # trainer brings its own framework as an extra, never the platform image.
-# annotide is not on a package index yet: install ../sdk first, or pip
-# will look the name up on PyPI.
+# In a checkout, install ../sdk first so pip uses it instead of PyPI's.
 dependencies = [
     "annotide>=0.1",
 ]
@@ -31,11 +48,18 @@ dev = [
     "mypy>=1.13",
 ]
 
+[project.urls]
+Homepage = "https://annotide.com"
+Documentation = "https://github.com/annotide/annotide/tree/main/training#readme"
+Source = "https://github.com/annotide/annotide/tree/main/training"
+Issues = "https://github.com/annotide/annotide/issues"
+Changelog = "https://github.com/annotide/annotide/releases"
+
 [project.scripts]
 annotide-train = "annotide_training.cli:main"
 
 [build-system]
-requires = ["setuptools>=75"]
+requires = ["setuptools>=77"]  # PEP 639 `license` expressions
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
