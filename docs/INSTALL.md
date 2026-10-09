@@ -10,7 +10,7 @@ you register.
 | Option | For | Guide |
 | ------ | --- | ----- |
 | Quick install (Docker Compose, published images) | One person or a small team, your own machine or a single server | §2 below |
-| Docker Compose from source | Evaluation, demos, development | [README → Quick start](../README.md#quick-start) |
+| Docker Compose from source | Evaluation, demos, development | [README → Quick start](../README.md#development-quick-start) |
 | Kubernetes with the Helm chart | Production on any cloud or on premises | [Helm chart README](../infra/helm/annotide/README.md) |
 | Azure: Terraform, then the Helm chart | Production on Azure, private networking (SEC-1) | [Terraform README](../infra/terraform/azure/README.md) |
 | AWS: Terraform, then the Helm chart | Production on AWS (EKS, RDS, ElastiCache, S3) | [Terraform README](../infra/terraform/aws/README.md) |

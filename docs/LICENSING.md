@@ -15,9 +15,9 @@ hosted or managed service. The edition is whatever the install's key allows.
 | Edition | Key `tier` | Price | Users | Business features |
 | ------- | ---------- | ----- | ----- | ----------------- |
 | **Community** | no key | free, commercial use included | 3 active | no |
-| **Team** | `team` | 12 €/user/month, or 29 €/month for 5 + 12 € per extra user; self-serve to 25 | the key's seats | no |
-| **Business** | `business` | 20 €/user/month; self-serve to 25 | the key's seats | yes |
-| **Enterprise** | `enterprise` | 10 €/user/month, annual, from 3 000 €/year | the key's seats | yes, plus offline keys, invoicing, contract terms |
+| **Team** | `team` | 12 €/user/month, or 29 €/month for 5 + 12 € per extra user; self-serve, any size | the key's seats | no |
+| **Business** | `business` | 20 €/user/month; self-serve, any size | the key's seats | yes |
+| **Enterprise** | `enterprise` | 18 €/user/month, annual, from 3 000 €/year; optional at any size | the key's seats | yes, plus offline keys, invoicing, contract terms |
 | **Trial** | `trial` | free, 30 days, once per install (LIC-34) | 25 | yes |
 
 **The rule** (replaces "every feature in every edition"): everything an
