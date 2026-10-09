@@ -1,13 +1,64 @@
 # Annotide
 
-Cloud-agnostic annotation platform for images, video, audio, text and PDF
-data. Teams bring their own object storage (Azure Blob, S3, GCS, or a local
-mount) and their own AI model endpoints — the platform never copies raw
-media into its own infrastructure. Annotators work through a browser-based
-Konva canvas; the browser talks to blob storage directly via short-lived
-signed URLs, so bulk media never round-trips through the API server.
+**Self-hosted data annotation and labeling platform** for images, video,
+audio, text, PDF, time series and LLM evaluation: an alternative to CVAT,
+Label Studio, Labelbox and V7 that keeps your data in your own cloud.
+Annotide reads media straight from your Azure Blob Storage, Amazon S3,
+Google Cloud Storage, Databricks volume or local disk through short-lived
+signed URLs and stores only the annotations. Pre-label with your own models,
+review and measure quality, and export to COCO, YOLO, spaCy and more.
 
-## Architecture
+[Website](https://annotide.com) ·
+[Docs](https://annotide.com/docs/) ·
+[Features](https://annotide.com/features/) ·
+[Pricing](https://annotide.com/pricing/) ·
+[Compare](https://annotide.com/compare/) ·
+[Python SDK](https://pypi.org/project/annotide/)
+
+![Annotide: label your data where it already lives](https://annotide.com/og.png)
+
+## Install
+
+```sh
+curl -fsSL https://annotide.com/install.sh | sh
+```
+
+One command with Docker on your own machine; production on any Kubernetes
+cluster with the Helm chart `oci://ghcr.io/annotide/charts/annotide`
+([installation guide](docs/INSTALL.md)). The Community edition is free for up
+to three users, commercial use included. Licence: [Elastic License 2.0](LICENSE.md)
+(source-available); the Python SDK, CLI and MCP server are Apache-2.0.
+
+## What it does
+
+- **Annotation tools:** box, rotated box, polygon, polyline, point,
+  keypoints, brush masks, superpixels and a smart polygon (interactive
+  segmentation with your model); video tracks with interpolation; text
+  spans and relations (NER); PDF with OCR; audio segments with speaker and
+  transcript; time series; LLM evaluation (ranking, pairwise, ratings).
+- **Quality control:** review queue, consensus, gold items, annotator
+  agreement and accuracy.
+- **Models and active learning:** pre-labelling with your own model
+  endpoints, uncertainty-ordered queues, model lineage, retraining webhooks
+  for MLflow, Databricks and Azure ML.
+- **Data:** versioned snapshots, train / val / test splits, export to COCO,
+  YOLO, YOLO-pose, spaCy, CoNLL and preference pairs; import from COCO,
+  YOLO, VOC, CVAT and Label Studio.
+- **Integrations:** Python SDK and CLI (`pip install annotide`), an MCP
+  server for AI agents, webhooks, Slack and Microsoft Teams.
+- **Enterprise basics without the enterprise tier:** OIDC single sign-on
+  (Entra ID or any OIDC provider), SCIM, folder-level permissions and an
+  audit log in the Business edition.
+
+## How it works
+
+Teams bring their own object storage and their own AI model endpoints; the
+platform never copies raw media into its own infrastructure. Annotators work
+through a browser-based Konva canvas; the browser talks to blob storage
+directly via short-lived signed URLs, so bulk media never round-trips
+through the API server.
+
+### Architecture
 
 ```mermaid
 flowchart LR
@@ -55,7 +106,7 @@ every service in this repo is built against that document.
 - Docker + Docker Compose v2 (`docker compose version`)
 - For local (non-container) development: Python 3.12 and Node.js 22
 
-## Quick start
+## Development quick start
 
 ```sh
 cp .env.example .env
@@ -134,11 +185,7 @@ authoritative list — with defaults and meanings — is in
 mirrored with development defaults in [`.env.example`](.env.example).
 Never commit a real `.env`.
 
-## Current status
+## Status
 
-**Phase-1 MVP skeleton.** The containers, compose wiring, CI pipeline and
-job scaffolding described above are in place; several application-level
-pieces (API routers, models, connectors, the Konva editor) are landing in
-parallel and may not be complete yet. "Definition of done" for this
-skeleton is tracked in
-[`docs/CONTRACTS.md`](docs/CONTRACTS.md#definition-of-done-for-the-skeleton).
+Released; see [releases](https://github.com/annotide/annotide/releases)
+for versions and changes. Security reports: [SECURITY.md](SECURITY.md).

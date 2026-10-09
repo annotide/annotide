@@ -1,7 +1,7 @@
 apiVersion: v2
 name: annotide
 description: >-
-  Cloud-agnostic annotation platform: API, worker, web frontend and the
+  Self-hosted data annotation and labeling platform: API, worker, web frontend and the
   reference model service. PostgreSQL and Redis are external.
 type: application
 # Set from the git tag by .github/workflows/release.yml at release time;
@@ -9,7 +9,15 @@ type: application
 version: 0.1.0
 appVersion: "0.1.0"
 kubeVersion: ">=1.25.0-0"
-keywords: [annotation, labeling, computer-vision]
+keywords:
+  - annotation
+  - labeling
+  - data-labeling
+  - data-annotation
+  - computer-vision
+  - llm-evaluation
+  - self-hosted
+  - mlops
 home: https://annotide.com
 sources:
   - https://github.com/annotide/annotide
