@@ -270,7 +270,7 @@ install behaves.
 | Sends | licence id, install id, host, active user count, version | install id, version, edition, active user count, salted-hash organisation fingerprint |
 | Receives | the renewed key, if one exists, and the revocation list | nothing |
 | Interval | daily, with retries | weekly |
-| Vendor learns | paid installs, copied keys, seat usage | Community clusters |
+| Vendor learns | paid installs, copied keys, seat usage | Community clusters; install counts by version and edition, in aggregate |
 
 The licence refresh is licence accounting, not telemetry: no fingerprint, no
 user identifiers. It is on by default because that is how a paying customer's
