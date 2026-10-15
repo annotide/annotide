@@ -5,10 +5,12 @@ and in-memory SQLite.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from datetime import UTC, datetime, timedelta
+from email.utils import format_datetime
 from typing import Any, cast
 
 import httpx
@@ -167,14 +169,56 @@ async def _state(sessionmaker: async_sessionmaker[AsyncSession]) -> LicenseState
 # --- Scheduling ---------------------------------------------------------------------
 
 
-def test_due_after_the_interval_and_at_most_hourly() -> None:
+def test_due_after_the_interval_unless_a_retry_waits() -> None:
     day = timedelta(days=1)
-    assert heartbeat.is_due(None, None, day, NOW)
-    assert not heartbeat.is_due(NOW - timedelta(hours=2), NOW - timedelta(hours=2), day, NOW)
-    assert heartbeat.is_due(NOW - timedelta(days=2), NOW - timedelta(days=2), day, NOW)
-    # A failure 30 minutes ago waits; one two hours ago is retried.
-    assert not heartbeat.is_due(NOW - timedelta(minutes=30), None, day, NOW)
-    assert heartbeat.is_due(NOW - timedelta(hours=2), NOW - timedelta(days=3), day, NOW)
+    assert vendor.is_due(None, None, day, NOW)
+    assert not vendor.is_due(None, NOW - timedelta(hours=2), day, NOW)
+    assert vendor.is_due(None, NOW - timedelta(days=2), day, NOW)
+    # A retry set for later waits; one whose time has come runs.
+    assert not vendor.is_due(NOW + timedelta(minutes=30), None, day, NOW)
+    assert vendor.is_due(NOW - timedelta(minutes=1), NOW - timedelta(days=3), day, NOW)
+
+
+def test_ticks_exactly_an_interval_apart_are_due() -> None:
+    """The 2-hour bug: an attempt stamped just after its tick skipped the next tick."""
+    tick = datetime(2026, 10, 14, 13, 17, 10, tzinfo=UTC)
+    stamped = tick + timedelta(milliseconds=350)
+    retry_at = vendor.next_attempt(httpx.ConnectError("refused"), 1, stamped)
+    assert retry_at == stamped + vendor.RETRY_AFTER
+    assert vendor.is_due(retry_at, None, timedelta(days=1), tick + timedelta(hours=1))
+    # The same for the interval after a success.
+    assert vendor.is_due(None, stamped, timedelta(days=1), tick + timedelta(days=1))
+    assert not vendor.is_due(None, stamped, timedelta(days=1), tick + timedelta(hours=23))
+
+
+def _status_error(status: int, retry_after: str | None = None) -> httpx.HTTPStatusError:
+    request = httpx.Request("POST", SERVER + "/v1/refresh")
+    headers = {"Retry-After": retry_after} if retry_after is not None else {}
+    response = httpx.Response(status, headers=headers, request=request)
+    return httpx.HTTPStatusError("failed", request=request, response=response)
+
+
+def test_a_waking_server_is_retried_after_minutes_then_hourly() -> None:
+    for exc in (_status_error(502), _status_error(503), _status_error(504), httpx.ReadTimeout("")):
+        assert vendor.next_attempt(exc, 1, NOW) == NOW + vendor.QUICK_RETRY
+    waking = _status_error(503)
+    assert vendor.next_attempt(waking, vendor.QUICK_RETRIES, NOW) == NOW + vendor.QUICK_RETRY
+    assert vendor.next_attempt(waking, vendor.QUICK_RETRIES + 1, NOW) == NOW + vendor.RETRY_AFTER
+    # Anything else is not a cold start.
+    for exc in (_status_error(500), _status_error(422), httpx.ConnectError("refused")):
+        assert vendor.next_attempt(exc, 1, NOW) == NOW + vendor.RETRY_AFTER
+
+
+def test_retry_after_is_honoured_within_reason() -> None:
+    # Sooner than our own delay changes nothing; later is waited for.
+    assert vendor.next_attempt(_status_error(503, "30"), 1, NOW) == NOW + vendor.QUICK_RETRY
+    assert vendor.next_attempt(_status_error(503, "600"), 1, NOW) == NOW + timedelta(minutes=10)
+    assert vendor.next_attempt(_status_error(429, "7200"), 1, NOW) == NOW + timedelta(hours=2)
+    later = format_datetime(NOW + timedelta(hours=3), usegmt=True)
+    assert vendor.next_attempt(_status_error(503, later), 1, NOW) == NOW + timedelta(hours=3)
+    # Not believed beyond a day; nonsense is ignored.
+    assert vendor.next_attempt(_status_error(503, "9999999"), 1, NOW) == NOW + timedelta(days=1)
+    assert vendor.next_attempt(_status_error(503, "soon"), 1, NOW) == NOW + vendor.QUICK_RETRY
 
 
 # --- Refresh ------------------------------------------------------------------------
@@ -205,7 +249,7 @@ async def test_refresh_stores_a_renewed_key_and_reports_the_sign_in_host(
             "install_id": "acme-prod",
             "host": "annotate.acme.com",
             "active_users": 1,
-            "version": heartbeat.VERSION,
+            "version": "dev",
         }
     ]
     state = await _state(sessionmaker)
@@ -297,7 +341,7 @@ async def test_refresh_says_why_it_cannot_run(
     assert server.requests == []
 
 
-async def test_refresh_if_due_runs_daily_and_retries_hourly(
+async def test_refresh_if_due_runs_daily_and_retries_soon_after_a_cold_start(
     sessionmaker: async_sessionmaker[AsyncSession], signer: Signer
 ) -> None:
     settings = make_settings(license_key=signer.key(expires_at="2027-10-31"))
@@ -312,13 +356,102 @@ async def test_refresh_if_due_runs_daily_and_retries_hourly(
             await session.commit()
         return ran
 
-    assert await tick(NOW)  # fails
-    assert not await tick(NOW + timedelta(minutes=30))
+    assert await tick(NOW)  # fails: the server is starting
+    assert not await tick(NOW + timedelta(minutes=2))
+    state = await _state(sessionmaker)
+    # SQLite hands back naive UTC datetimes.
+    retry_at = (NOW + vendor.QUICK_RETRY).replace(tzinfo=None)
+    assert (state.refresh_failures, state.refresh_retry_at) == (1, retry_at)
     down = False
-    assert await tick(NOW + timedelta(hours=1))  # retried, succeeds
+    assert await tick(NOW + timedelta(minutes=5))  # retried, succeeds
+    state = await _state(sessionmaker)
+    assert (state.refresh_failures, state.refresh_retry_at, state.refresh_error) == (0, None, None)
     assert not await tick(NOW + timedelta(hours=20))
     assert await tick(NOW + timedelta(hours=25))
     assert len(server.requests) == 3
+
+
+async def test_quick_retries_stop_after_a_few(
+    sessionmaker: async_sessionmaker[AsyncSession], signer: Signer
+) -> None:
+    settings = make_settings(license_key=signer.key(expires_at="2027-10-31"))
+    server = FakeServer(lambda _r: httpx.Response(503))
+    attempts: list[int] = []
+    # The worker's cron: every five minutes, for two hours.
+    for minutes in range(0, 120, 5):
+        async with sessionmaker() as session, server.client() as client:
+            if await refresh.refresh_if_due(
+                session, settings, client, now=NOW + timedelta(minutes=minutes)
+            ):
+                attempts.append(minutes)
+            await session.commit()
+    # The first try, QUICK_RETRIES quick ones, then hourly.
+    assert attempts == [0, 5, 10, 15, 75]
+
+
+# --- A slow licence server, over a real socket ------------------------------------
+
+SlowServer = Callable[[float | None], Awaitable[str]]
+
+
+@pytest.fixture
+async def slow_server() -> AsyncIterator[SlowServer]:
+    """A licence server on localhost that answers after a delay, or never (``None``)."""
+    servers: list[asyncio.Server] = []
+    done = asyncio.Event()
+
+    async def start(delay: float | None) -> str:
+        async def handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+            await reader.readuntil(b"\r\n\r\n")
+            if delay is None:
+                await done.wait()
+            else:
+                await asyncio.sleep(delay)
+                writer.write(b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n")
+                await writer.drain()
+            writer.close()
+
+        server = await asyncio.start_server(handle, "127.0.0.1", 0)
+        servers.append(server)
+        port = server.sockets[0].getsockname()[1]
+        return f"http://127.0.0.1:{port}"
+
+    yield start
+    done.set()
+    for server in servers:
+        server.close()
+        await server.wait_closed()
+
+
+@pytest.mark.usefixtures("org")
+async def test_a_slow_server_is_waited_for_and_a_silent_one_retried_soon(
+    sessionmaker: async_sessionmaker[AsyncSession],
+    slow_server: SlowServer,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The worker's timeouts scaled down: a "cold start" of 0.3 s against 1 s.
+    monkeypatch.setattr(vendor, "BACKGROUND_TIMEOUT", httpx.Timeout(1.0, connect=1.0))
+
+    async def tick(url: str) -> dict[str, Any]:
+        settings = make_settings(license_server_url=url, telemetry_enabled=True)
+        return await licence_calls({"settings": settings, "sessionmaker": sessionmaker})
+
+    assert (await tick(await slow_server(0.3)))["heartbeat"]
+    state = await _state(sessionmaker)
+    assert state.heartbeat_sent_at is not None
+    assert state.heartbeat_error is None
+
+    async with sessionmaker() as session:
+        row = await get_state(session)
+        assert row is not None
+        row.heartbeat_sent_at = None  # due again
+        await session.commit()
+    assert (await tick(await slow_server(None)))["heartbeat"]
+    state = await _state(sessionmaker)
+    assert state.heartbeat_error == "The licence server did not answer in time."
+    assert state.heartbeat_failures == 1
+    assert state.heartbeat_attempted_at is not None
+    assert state.heartbeat_retry_at == state.heartbeat_attempted_at + vendor.QUICK_RETRY
 
 
 # --- Heartbeat ------------------------------------------------------------------------
@@ -328,7 +461,9 @@ async def test_refresh_if_due_runs_daily_and_retries_hourly(
 async def test_heartbeat_sends_the_preview_payload_weekly(
     sessionmaker: async_sessionmaker[AsyncSession],
 ) -> None:
-    settings = make_settings(telemetry_enabled=True, license_fingerprint_salt="salt")
+    settings = make_settings(
+        telemetry_enabled=True, license_fingerprint_salt="salt", version="0.1.3"
+    )
     server = FakeServer(lambda _r: httpx.Response(204))
 
     async def tick(at: datetime) -> bool:
@@ -344,6 +479,7 @@ async def test_heartbeat_sends_the_preview_payload_weekly(
     body = server.bodies("/v1/heartbeat")[0]
     assert set(body) == {"install_id", "version", "licence_type", "active_users", "fingerprint"}
     assert body["licence_type"] == "community"
+    assert body["version"] == "0.1.3"  # APP_VERSION, baked in by the release
     assert "acme.com" not in json.dumps(body)  # hashed, never plain
     state = await _state(sessionmaker)
     assert state.heartbeat_sent_at is not None

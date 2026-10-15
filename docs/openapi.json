@@ -11171,7 +11171,7 @@
     "description": "Data stays in the customer's own storage; this API serves metadata, annotations and short-lived signed URLs.",
     "summary": "Cloud-agnostic annotation platform",
     "title": "Annotide API",
-    "version": "0.1.0"
+    "version": "dev"
   },
   "openapi": "3.1.0",
   "paths": {

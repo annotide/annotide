@@ -5,7 +5,7 @@
 import { useCallback, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { UseQueryOptions } from '@tanstack/react-query'
-import { api, type CursorPage, type ListItemsFilters, type ListTasksFilters } from './client'
+import { api, ApiError, type CursorPage, type ListItemsFilters, type ListTasksFilters } from './client'
 import type {
   ConsensusResolve,
   GoldTasksRequest,
@@ -1381,11 +1381,20 @@ export function useTelemetryPreview() {
   })
 }
 
-/** Start the 30-day Business trial (LIC-34); the trial key becomes the licence in force. */
+/** A `503` from the trial: our call has woken the licence server (it scales to zero). */
+export const TRIAL_RETRY_DELAY_MS = 3_000
+
+/**
+ * Start the 30-day Business trial (LIC-34); the trial key becomes the licence in force.
+ * A cold licence server answers `503` (or times out) the first time, so that is asked
+ * once more by itself; the licence server hands the same install the same key.
+ */
 export function useStartTrial() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: () => api.startTrial(),
+    retry: (failures, error) => failures < 1 && error instanceof ApiError && error.status === 503,
+    retryDelay: TRIAL_RETRY_DELAY_MS,
     onSuccess: (licence) => queryClient.setQueryData(queryKeys.license(), licence),
   })
 }

@@ -149,9 +149,9 @@ class WorkerSettings:
         cron(traced(deliver_webhooks), second={5, 20, 35, 50}, unique=True),
         # Notification e-mail (API-7): every minute; a no-op without SMTP.
         cron(traced(send_notification_emails), second=25, unique=True),
-        # Licence refresh (LIC-27) and heartbeat (LIC-6): hourly; each is
-        # due daily / weekly and decides that itself.
-        cron(traced(licence_calls), minute=17, second=10, unique=True),
+        # Licence refresh (LIC-27) and heartbeat (LIC-6): every five minutes;
+        # each is due daily / weekly, or for a retry, and decides that itself.
+        cron(traced(licence_calls), minute=set(range(2, 60, 5)), second=10, unique=True),
         # Backlog gauges for the alert rules (OPS-4): every minute, every replica.
         cron(traced(record_backlog), second=45),
         # Rows the queue lost (Redis flushed or restored): every five minutes.

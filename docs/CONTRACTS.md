@@ -980,8 +980,10 @@ key pasted by an admin, fetched by the licence refresh or a trial), `key_source`
 latest UTC date seen at sign-in), `host_mismatch_since` (date, nullable —
 first sign-in on a host the key in force is not bound to), `last_host` (text,
 nullable — last non-loopback host seen at sign-in), `refresh_attempted_at`,
-`refresh_succeeded_at`, `heartbeat_attempted_at`, `heartbeat_sent_at`
-(timestamptz, nullable), `refresh_error`, `heartbeat_error` (text, nullable),
+`refresh_succeeded_at`, `heartbeat_attempted_at`, `heartbeat_sent_at`,
+`refresh_retry_at`, `heartbeat_retry_at` (timestamptz, nullable — when a
+failed call may run again), `refresh_failures`, `heartbeat_failures` (integer,
+default 0 — failures in a row), `refresh_error`, `heartbeat_error` (text, nullable),
 `refresh_payload`, `heartbeat_payload` (JSONB, nullable — the last body sent),
 `revocations` (text, nullable — the latest verified revocation list, LIC-8),
 `created_at`, `updated_at`. See *Licence key* for how it is read.
@@ -2231,7 +2233,12 @@ force (a running trial included), when the stored key is already a trial
 key, when this install or host already had a trial (the licence service's
 409), or when licence calls are disabled (`APP_LICENSE_REFRESH_ENABLED=false`,
 no `APP_LICENSE_SERVER_URL` or no install id); 503 `trial-service` when the
-licence service can't be reached or answers anything else. A returned key is stored
+licence service can't be reached or answers anything else. The call waits
+45 s; a timeout or a `502`/`503`/`504` from the licence service (a cold start:
+it scales to zero) is a 503 whose detail says to try again in a minute, and
+the licence page asks once more by itself 3 s later. Asking again is safe: the
+licence service hands the same install and host the same running trial's key.
+A returned key is stored
 only if it verifies, is `valid` for the request host and has tier `trial`.
 Audited as `license.trial`.
 
@@ -2303,14 +2310,16 @@ annotations on at least 5 distinct days (`count` = days). Sorted by kind,
 then email.
 
 Licence refresh and heartbeat (LIC-27, LIC-6, `services/licensing/refresh.py`,
-`services/licensing/heartbeat.py`, worker cron `licence_calls` at minute 17 of
-every hour). Both `POST` JSON to `APP_LICENSE_SERVER_URL` with a 10 s timeout;
-unset, nothing is ever sent. Neither outcome changes how the install behaves
+`services/licensing/heartbeat.py`, worker cron `licence_calls` every five
+minutes, at minute 2, 7, …, 57). Both `POST` JSON to `APP_LICENSE_SERVER_URL`
+from the worker with a 90 s read timeout (10 s to connect): the licence
+service scales to zero and a cold start takes about a minute; an admin's
+`POST /license/refresh` waits 45 s. Unset, nothing is ever sent. Neither outcome changes how the install behaves
 except that a renewed key is stored.
 
 - **Refresh** — on unless `APP_LICENSE_REFRESH_ENABLED=false`, only while a
   verified key (valid or expired) is in force. Due when it has not succeeded
-  in 24 h and was not attempted in the last hour. `POST {url}/v1/refresh`
+  in 24 h and no retry is waiting (below). `POST {url}/v1/refresh`
   `{license_id, install_id, host, active_users, version}` — `host` is
   `APP_PUBLIC_HOSTNAME`, else the last non-loopback host seen at sign-in
   (`license_state.last_host`), else `null`. The answer is `200 {key}` (`key`
@@ -2320,13 +2329,19 @@ except that a renewed key is stored.
   reported host and expires later than the stored one is stored with source
   `refresh`; any other key is an error and is not stored.
 - **Heartbeat** — unless `APP_TELEMETRY_ENABLED=false` (on by default, LIC-9), any
-  edition. Due when not sent in 7 days and not attempted in the last hour.
+  edition. Due when not sent in 7 days and no retry is waiting (below).
   `POST {url}/v1/heartbeat` with exactly the body of `GET
   /licensing/telemetry/preview` minus `enabled` and `notice`; any 2xx counts.
 
 Each attempt records `…_attempted_at`, on success `…_succeeded_at` /
 `heartbeat_sent_at`, the error text (or `null`), and the payload as sent, in
-`license_state`. `GET /license/refresh` (superuser) returns `{enabled,
+`license_state`. A failure counts `…_failures` up and sets `…_retry_at`: 5
+minutes later after a timeout or a `502`/`503`/`504` (the failed call has
+woken the service), for the first three failures in a row; 1 hour later
+otherwise; never sooner than the answer's `Retry-After` (seconds or an HTTP
+date, believed up to a day). A success resets both. The due checks allow a
+minute's slack, so an attempt stamped just after its tick does not skip the
+next tick. Both bodies carry `version`, `APP_VERSION`. `GET /license/refresh` (superuser) returns `{enabled,
 server_configured, payload, attempted_at, succeeded_at, error, last_payload}`
 — `payload` is what would be sent now (`null` without a verified key).
 `POST /license/refresh` (superuser) runs a refresh now, due or not, and
@@ -2394,6 +2409,7 @@ variable is added to `.env.example` in the same change.
 | `APP_LICENSE_SERVER_URL` | — | vendor licence server base URL for the refresh, heartbeat and trial; unset or empty = nothing is sent |
 | `APP_LICENSE_REFRESH_ENABLED` | `true` | daily licence refresh for keyed installs (LIC-27) |
 | `APP_INSTALL_ID` | — | stable id for this installation |
+| `APP_VERSION` | `dev` | the release this install runs, reported by the heartbeat and the licence refresh; baked into the backend image from the release tag (`ARG APP_VERSION`, set by `release.yml`), so not set by hand |
 | `APP_LICENSE_KEY` | — | licence key (LIC-1); unset = Community mode |
 | `APP_LICENSE_FINGERPRINT_SALT` | built in (`core/config.py`) | vendor-wide HMAC salt, public by design; empty = the built-in value (LIC-16) |
 | `APP_PUBLIC_HOSTNAME` | — | this install's public hostname, if any |

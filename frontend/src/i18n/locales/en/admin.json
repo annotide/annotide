@@ -446,7 +446,7 @@
       "communityNext": "Team adds people (12 €/user/month, or 29 €/month for five plus 12 € per extra user). Business adds single sign-on, SCIM, folder permissions, full audit history and quality control (20 €/user/month).",
       "pricing": "See pricing",
       "startTrial": "Start 30-day Business trial",
-      "trialStarting": "Starting trial…",
+      "trialStarting": "Starting trial… The licence server can take a minute to wake up.",
       "trialPrivacy": "Free, no card and no e-mail. Asks the licence server for a trial key, sending only this installation's id and host. When it ends, the installation returns to Community and keeps all its data.",
       "trialUsed": "This installation has had its Business trial. A licence key adds people and the Business features.",
       "trialUntil": "Every Business feature, for up to 25 people, until {{date}}. Afterwards the installation returns to Community, for up to three people, and keeps all its data.",

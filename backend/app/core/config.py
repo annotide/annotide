@@ -138,6 +138,10 @@ class Settings(BaseSettings):
     notification_email_max_age: int = Field(default=86400, ge=60)
 
     # --- Licensing and telemetry (LIC-6, LIC-9, LIC-16, LIC-21, LIC-27) ----
+    #: The release this install runs, reported by the heartbeat and the licence
+    #: refresh. Baked into the image from the release tag (`backend/Dockerfile`,
+    #: `release.yml`); "dev" for a local build. Not meant to be set by hand.
+    version: str = "dev"
     #: Vendor licence server base URL for the licence refresh and the
     #: heartbeat. Unset, neither ever sends anything.
     license_server_url: str | None = None

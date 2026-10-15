@@ -127,6 +127,9 @@ services:
       args:
         # `otel` bakes in OpenTelemetry (OPS-3); empty keeps the image lean.
         EXTRAS: ${BACKEND_EXTRAS:-}
+        # Reported by the heartbeat and the licence refresh; a release image
+        # has its tag's version baked in, so it is a build arg, not environment.
+        APP_VERSION: ${APP_VERSION:-dev}
     image: annotide-backend:local
     # Migrations run once, synchronously, before the API starts serving.
     # Keep-alive 75 s, as in the image (backend/Dockerfile).

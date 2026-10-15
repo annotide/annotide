@@ -268,6 +268,26 @@ class TestStartTrial:
             state = await get_state(session)
             assert state is None or not state.key
 
+    @pytest.mark.parametrize("status", [502, 503, 504])
+    async def test_a_waking_server_reads_as_try_again(
+        self, vendor_keys: None, maker: async_sessionmaker[AsyncSession], status: int
+    ) -> None:
+        client = server(httpx.Response(status, headers={"Retry-After": "30"}), [])
+        async with maker() as session:
+            with pytest.raises(trial.TrialServiceError, match="starting up"):
+                await trial.start_trial(session, trial_settings(), client, host=None)
+
+    async def test_a_timeout_reads_as_try_again(
+        self, vendor_keys: None, maker: async_sessionmaker[AsyncSession]
+    ) -> None:
+        def silent(request: httpx.Request) -> httpx.Response:
+            raise httpx.ReadTimeout("no answer", request=request)
+
+        client = httpx.AsyncClient(transport=httpx.MockTransport(silent))
+        async with maker() as session:
+            with pytest.raises(trial.TrialServiceError, match="starting up"):
+                await trial.start_trial(session, trial_settings(), client, host=None)
+
     async def test_a_paid_key_is_not_accepted_as_a_trial(
         self, vendor_keys: None, maker: async_sessionmaker[AsyncSession]
     ) -> None:
