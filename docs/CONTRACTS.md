@@ -2312,7 +2312,7 @@ then email.
 Licence refresh and heartbeat (LIC-27, LIC-6, `services/licensing/refresh.py`,
 `services/licensing/heartbeat.py`, worker cron `licence_calls` every five
 minutes, at minute 2, 7, …, 57). Both `POST` JSON to `APP_LICENSE_SERVER_URL`
-from the worker with a 90 s read timeout (10 s to connect): the licence
+from the worker with a 120 s read timeout (10 s to connect): the licence
 service scales to zero and a cold start takes about a minute; an admin's
 `POST /license/refresh` waits 45 s. Unset, nothing is ever sent. Neither outcome changes how the install behaves
 except that a renewed key is stored.

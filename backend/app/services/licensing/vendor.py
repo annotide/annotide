@@ -22,9 +22,11 @@ import httpx
 
 from app.core.config import Settings
 
-#: Worker calls: nothing waits on them, so they outlast a cold start (the
-#: licence server answers `503` itself if its database is not back in 60 s).
-BACKGROUND_TIMEOUT: Final = httpx.Timeout(90.0, connect=10.0)
+#: Worker calls: nothing waits on them, so they outlast a cold start. The
+#: container starts in ~25 s and the licence server answers `503` itself if its
+#: database is not back in 60 s; the rest is margin for a slow container start.
+#: Refresh and heartbeat back to back still fit in the five-minute cron tick.
+BACKGROUND_TIMEOUT: Final = httpx.Timeout(120.0, connect=10.0)
 #: An admin's click: below the 60 s an ingress usually allows a request.
 REQUEST_TIMEOUT: Final = httpx.Timeout(45.0, connect=10.0)
 
