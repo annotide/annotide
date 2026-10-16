@@ -89,10 +89,10 @@ flowchart LR
   reads/writes media directly against the customer's own storage — the
   backend never proxies large files.
 - The **worker** (arq, Redis-backed; same image as the API, started as
-  `arq app.worker.main.WorkerSettings`) runs source scans, snapshots and
-  exports, plus a recurring **outbox publisher** that writes committed
-  annotations to blob storage. Tiling and model pre-labelling jobs exist as
-  job types but fail with "not implemented" until their platform side lands.
+  `arq app.worker.main.WorkerSettings`) runs source scans, image tiling,
+  model pre-labelling, imports, exports, snapshots, thumbnails, cache
+  rebuilds and text extraction, plus a recurring **outbox publisher** that
+  writes committed annotations to blob storage.
 - All durable state (projects, items, tasks, annotation history, jobs)
   lives in **PostgreSQL**; **Redis** is the job queue only, not a source of
   truth.
