@@ -27,9 +27,10 @@ import asyncio
 import base64
 import hashlib
 import ipaddress
+import os
 import socket
 import uuid
-from typing import Final
+from typing import Any, Final
 from urllib.parse import urlsplit
 
 import httpx
@@ -68,6 +69,9 @@ _METADATA_ADDRESSES: Final = (
     ipaddress.ip_network("fd00:ec2::254/128"),  # AWS IMDS over IPv6
     ipaddress.ip_network("100.100.100.200/32"),  # Alibaba Cloud
 )
+
+type _Address = ipaddress.IPv4Address | ipaddress.IPv6Address
+type _Network = ipaddress.IPv4Network | ipaddress.IPv6Network
 
 DOWNSCALE_MAX_DIM: Final = 256
 ENERGY_THRESHOLD: Final = 0.35
@@ -153,10 +157,22 @@ async def fetch_image_bytes(url: str) -> bytes:
             raise ValueError(f"image exceeds {MAX_IMAGE_BYTES} byte cap")
         return raw
 
-    await refuse_metadata_url(url)
+    address = await resolve_media_url(url)
+    target = httpx.URL(url)
+    # Connect to the address just checked rather than letting httpx resolve the
+    # name again (DNS rebinding); the Host header and the TLS name stay the
+    # original host, so virtual hosting, signed URLs and certificates still work.
+    extensions: dict[str, Any] = {}
+    if target.scheme == "https":
+        extensions["sni_hostname"] = target.raw_host.decode("ascii")
     async with (
         httpx.AsyncClient(timeout=FETCH_TIMEOUT) as client,
-        client.stream("GET", url) as response,
+        client.stream(
+            "GET",
+            target.copy_with(host=str(address)),
+            headers={"Host": target.netloc.decode("ascii")},
+            extensions=extensions,
+        ) as response,
     ):
         response.raise_for_status()
         chunks = bytearray()
@@ -167,11 +183,14 @@ async def fetch_image_bytes(url: str) -> bytes:
         return bytes(chunks)
 
 
-async def refuse_metadata_url(url: str) -> None:
-    """Raise `ValueError` unless `url` is http(s) and resolves to no metadata address.
+async def resolve_media_url(url: str) -> _Address:
+    """Resolve the host of `url` once and return the address to fetch it from.
 
-    Redirects are not followed, so the address checked is the one fetched,
-    short of DNS changing between the two lookups.
+    Raises `ValueError` unless `url` is http(s) and every address its host
+    resolves to is allowed: never a cloud metadata endpoint, and, with
+    `MODEL_FETCH_PRIVATE_NETWORKS` set, no non-public address outside it.
+    The caller connects to the returned address, and redirects are not
+    followed, so the address checked is the one fetched.
     """
     parts = urlsplit(url)
     host = (parts.hostname or "").rstrip(".").lower()
@@ -180,7 +199,7 @@ async def refuse_metadata_url(url: str) -> None:
     if host in _METADATA_HOSTS:
         raise ValueError("media URL points at a cloud metadata endpoint")
     try:
-        addresses = [ipaddress.ip_address(host)]
+        addresses: list[_Address] = [ipaddress.ip_address(host)]
     except ValueError:
         try:
             infos = await asyncio.get_running_loop().getaddrinfo(
@@ -189,9 +208,48 @@ async def refuse_metadata_url(url: str) -> None:
         except OSError as exc:
             raise ValueError(f"cannot resolve media host {host!r}") from exc
         addresses = [ipaddress.ip_address(info[4][0]) for info in infos]
+    if not addresses:
+        raise ValueError(f"cannot resolve media host {host!r}")
+    private_networks = _private_networks()
     for address in addresses:
-        if any(address in network for network in _METADATA_ADDRESSES):
+        # ::ffff:169.254.169.254 reaches the IPv4 address on a dual-stack socket.
+        effective: _Address = address
+        if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped:
+            effective = address.ipv4_mapped
+        if any(effective in network for network in _METADATA_ADDRESSES):
             raise ValueError("media URL points at a cloud metadata endpoint")
+        if (
+            private_networks is not None
+            and not effective.is_global
+            and not any(effective in network for network in private_networks)
+        ):
+            raise ValueError(
+                f"media URL points at {effective}, outside MODEL_FETCH_PRIVATE_NETWORKS"
+            )
+    return addresses[0]
+
+
+def _private_networks() -> tuple[_Network, ...] | None:
+    """`MODEL_FETCH_PRIVATE_NETWORKS`: the non-public networks media may come from.
+
+    Unset (or `*`) allows every address but the metadata endpoints, because
+    the platform usually serves media from a private one; `none` allows public
+    addresses only; otherwise a comma-separated list of CIDRs. Read per request,
+    like `MODEL_API_KEY`.
+    """
+    raw = os.environ.get("MODEL_FETCH_PRIVATE_NETWORKS", "").strip()
+    if raw in ("", "*"):
+        return None
+    if raw.lower() == "none":
+        return ()
+    try:
+        return tuple(
+            ipaddress.ip_network(part.strip(), strict=False)
+            for part in raw.split(",")
+            if part.strip()
+        )
+    except ValueError as exc:
+        raise ValueError(f"MODEL_FETCH_PRIVATE_NETWORKS is invalid: {exc}") from exc
 
 
 def load_image(raw: bytes) -> Image.Image:

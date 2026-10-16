@@ -29,7 +29,7 @@ and, if configured, the vendor licence server.
 | API → outside | Webhooks refuse private, loopback, link-local and metadata addresses (SEC-4); the HTTP connector stays under its `base_url`, and no connector redirect leads from a public host to an internal one or to metadata | `core/netguard.py`, `connectors/http.py`, `connectors/sharepoint.py` |
 | IdP → API (SAML) | Assertion or response signed by a key in the IdP metadata (`xmlsec1`), issuer, audience, destination, validity window, `InResponseTo` bound to the browser's signed flow cookie; IdP-initiated and transient NameIDs refused; XML parsed with defusedxml | `services/saml.py`, `api/v1/auth.py` |
 | Imports | Archives are capped in member count and unpacked size before anything is read | `importers/base.py::expand_archive` |
-| Reference model service | Optional bearer key (`MODEL_API_KEY`) on every route but the probes; media URLs must be http(s) and may not reach cloud metadata endpoints | `model-service/app/main.py`, `backends/heuristic.py::refuse_metadata_url` |
+| Reference model service | Optional bearer key (`MODEL_API_KEY`) on every route but the probes; media URLs must be http(s) and may not reach cloud metadata endpoints; the fetch connects to the address checked (no DNS rebinding) and follows no redirect; `MODEL_FETCH_PRIVATE_NETWORKS` limits private addresses to the listed networks | `model-service/app/main.py`, `backends/heuristic.py::resolve_media_url` |
 | Secrets | Connectors and models hold references (`azurekeyvault://`, `awssecrets://`, `gcpsecrets://`, `env:`, `file:`), never values (AUTH-7) | `services/secrets/` |
 | Licensing | Keys verified offline against compiled-in public keys; no check depends on reaching a vendor service (LIC-28) | `services/licensing/` |
 

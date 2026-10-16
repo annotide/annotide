@@ -601,7 +601,11 @@ with `{item_id, url, width, height, point? | box?}` (see
 The reference service takes an optional `MODEL_API_KEY` (unset = open):
 when set, every route but `/health` and `/ready` needs `Authorization:
 Bearer <key>`, which the platform sends for a model registered with the
-`bearer` identity and a `secret_ref` holding the key.
+`bearer` identity and a `secret_ref` holding the key. It fetches media URLs
+only over http(s), never from a cloud metadata address, from the address it
+checked and without following redirects; `MODEL_FETCH_PRIVATE_NETWORKS`
+(comma-separated CIDRs, or `none`) limits which private addresses are allowed
+(unset = all of them, since the platform usually serves media from one).
 For `ocr` models (reading scanned PDFs, below) the platform calls
 `{endpoint_url}/ocr` with `{item_id, url, media_type: "pdf", pages: [n]}`
 and expects `{engine, pages: [{page, width, height, words: [{text, bbox}]}]}`

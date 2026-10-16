@@ -235,7 +235,9 @@ model:
   # Extra environment for the reference model service, e.g. MODEL_API_KEY to
   # require a bearer token on every route but /health and /ready; register
   # the model with identity_type "bearer" and a secret_ref holding the same
-  # key (model-service/README.md).
+  # key (model-service/README.md). MODEL_FETCH_PRIVATE_NETWORKS limits the
+  # private networks media URLs may point at, e.g. the pod CIDR when media is
+  # served by the in-cluster backend.
   env: {}
 
 # -- Database migrations (`alembic upgrade head`) run as a Helm hook Job
