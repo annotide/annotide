@@ -216,6 +216,7 @@ six endpoints from your own stack — that is the whole point of the contract.
 | `SAM2_CACHE_ITEMS` | `16` | sam2: items whose encoder output stays in memory (~17 MB each) |
 | `PORT` | `9000` | listen port |
 | `MODEL_API_KEY` | — | when set, every route except `/health` and `/ready` needs `Authorization: Bearer <key>` (see below) |
+| `MODEL_FETCH_PRIVATE_NETWORKS` | — (any) | private networks media URLs may point at: comma-separated CIDRs, or `none` for public addresses only (see below) |
 | `OCR_ENGINE` | `auto` | `auto`, `none`, `tesseract`, `anthropic`, `openai` (above) |
 | `OCR_MAX_PAGES` | `20` | pages read per `/ocr` request or pre-labelled item |
 | `OCR_LANGUAGES` | `eng` | Tesseract languages, `+`-joined |
@@ -243,6 +244,16 @@ model with `identity_type: "bearer"` and a `secret_ref` that resolves to the sam
 key (for example `env:MODEL_API_KEY_SECRET` or a Key Vault reference, like any
 other model secret); the platform then sends `Authorization: Bearer <key>` on
 every call.
+
+Media URLs come from the caller, so the service guards what it fetches: http(s)
+only, no redirects, never a cloud metadata address (169.254.0.0/16 and the
+like), and it connects to the address it checked rather than resolving the
+name twice, so DNS rebinding cannot swap in another one. Private addresses are
+allowed by default because the platform usually serves media from one (the
+local connector, Azurite, an in-cluster MinIO). To narrow that, set
+`MODEL_FETCH_PRIVATE_NETWORKS` to the networks media really comes from, for
+example the pod CIDR, or to `none` when all media is on public object storage;
+then anything else on the private network is out of reach.
 
 The service fetches the item URLs it is sent. It accepts only `http(s)` and
 `data:` URLs, follows no redirects, and refuses cloud metadata endpoints

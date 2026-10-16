@@ -319,6 +319,9 @@ services:
       # Optional bearer key for every route but /health and /ready. Empty = open.
       # Register the model with identity_type bearer + a secret_ref for the same key.
       MODEL_API_KEY: ${MODEL_API_KEY:-}
+      # Private networks media URLs may point at (CIDRs, or none). Empty = any but
+      # cloud metadata; the local stack serves media from the compose network.
+      MODEL_FETCH_PRIVATE_NETWORKS: ${MODEL_FETCH_PRIVATE_NETWORKS:-}
       # OCR for scanned PDFs: auto (Tesseract in the image), none, tesseract,
       # anthropic (Claude, needs ANTHROPIC_API_KEY) or openai (any
       # OpenAI-compatible endpoint: OCR_LLM_BASE_URL, OCR_LLM_MODEL).
@@ -347,6 +350,7 @@ services:
     profiles: ["sam2"]
     environment:
       MODEL_API_KEY: ${MODEL_API_KEY:-}
+      MODEL_FETCH_PRIVATE_NETWORKS: ${MODEL_FETCH_PRIVATE_NETWORKS:-}
       # Items whose encoder output stays in memory (~17 MB each).
       SAM2_CACHE_ITEMS: ${SAM2_CACHE_ITEMS:-16}
       OCR_ENGINE: none
