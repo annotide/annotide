@@ -1,6 +1,9 @@
-# Dependency updates as pull requests, grouped so a week's bumps arrive as one
-# PR per ecosystem and directory. Security updates (Settings → Code security)
-# arrive on their own, outside this schedule.
+# Dependency updates as pull requests. Minor and patch versions are grouped,
+# so a week's routine bumps arrive as one PR per ecosystem and directory and
+# one failing upgrade cannot hold back the rest. Major versions arrive one
+# dependency per PR: each is a migration to plan (React, Konva, Tailwind,
+# ESLint, TypeScript), not a bump to merge with others. Security updates
+# (Settings → Code security) arrive on their own, outside this schedule.
 version: 2
 updates:
   - package-ecosystem: pip
@@ -9,21 +12,38 @@ updates:
     groups:
       python:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
   - package-ecosystem: npm
     directory: /frontend
     schedule: { interval: weekly }
     groups:
       npm:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
+      # Majors that only work together arrive as one PR per family.
+      react:
+        patterns: ["react", "react-dom", "@types/react", "@types/react-dom", "react-konva", "konva"]
+        update-types: ["major"]
+      eslint:
+        patterns: ["eslint", "eslint-plugin-*", "@typescript-eslint/*"]
+        update-types: ["major"]
   - package-ecosystem: docker
     directories: ["/backend", "/frontend", "/model-service"]
     schedule: { interval: weekly }
+    ignore:
+      # The images run the Python and Node versions CI tests (PYTHON_VERSION,
+      # NODE_VERSION in ci.yml); move all of them together, by hand.
+      - dependency-name: python
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: weekly }
     groups:
       actions:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
   - package-ecosystem: terraform
     directories: ["/infra/terraform/azure", "/infra/terraform/aws", "/infra/terraform/gcp"]
     schedule: { interval: monthly }
