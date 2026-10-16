@@ -27,8 +27,13 @@ x-app-env: &app-env
   APP_SECRET_KEY: ${APP_SECRET_KEY:?Set APP_SECRET_KEY in .env (install.sh does this for you)}
   APP_SECRET_KEY_PREVIOUS: ${APP_SECRET_KEY_PREVIOUS:-}
   APP_SIGNED_URL_TTL: ${APP_SIGNED_URL_TTL:-900}
-  # How the bundled model service reaches the API for local-disk media.
-  APP_INTERNAL_API_URL: http://backend:8000
+  # How a model service reaches the API for local-disk media: the bundled
+  # ones by the compose network; a model on another machine needs this
+  # install's own address, e.g. https://annotate.example.com.
+  APP_INTERNAL_API_URL: ${APP_INTERNAL_API_URL:-http://backend:8000}
+  # The key a model service asks for (its MODEL_API_KEY), for registering a
+  # model with identity `bearer` and secret reference env:MODEL_API_KEY.
+  MODEL_API_KEY: ${MODEL_API_KEY:-}
   APP_CORS_ORIGINS: ${APP_CORS_ORIGINS:-http://localhost:${ANNOTIDE_PORT:-8080}}
   APP_FRONTEND_URL: ${APP_FRONTEND_URL:-http://localhost:${ANNOTIDE_PORT:-8080}}
   APP_TRUSTED_PROXIES: ${APP_TRUSTED_PROXIES:-}

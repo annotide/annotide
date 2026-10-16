@@ -86,6 +86,32 @@ further clicks on it answer in tens of milliseconds. The last
 ready. The class you draw in must allow polygons; the canvas says so if it
 does not.
 
+#### SAM2 on another machine
+
+SAM2 is a plain HTTP service, so it can run anywhere this install can
+reach, for example a machine with more CPU:
+
+```sh
+docker run -d --restart unless-stopped -p 9000:9000 \
+  -e MODEL_API_KEY=<a long random key> -e OCR_ENGINE=none \
+  ghcr.io/annotide/annotide-model-sam2:latest
+```
+
+The annotator never talks to it directly: on a click, this install sends
+SAM2 the click and a short-lived link to the image, SAM2 fetches the image
+from that link and answers with the outline. So:
+
+- **This install must reach SAM2.** Put HTTPS in front of it when the
+  traffic leaves your network, and set the key: `MODEL_API_KEY` in this
+  install's `.env` as well, then register the model with **Endpoint URL**
+  `https://sam2.example.com`, **Identity** `bearer`, **Secret reference**
+  `env:MODEL_API_KEY`.
+- **SAM2 must reach the images.** With cloud storage (Azure Blob, S3, GCS)
+  the link points at the storage itself. With local disk it points back at
+  this install, so set `APP_INTERNAL_API_URL` to this install's address as
+  SAM2 sees it, e.g. `https://annotate.example.com`.
+- A click waits at most 8 seconds for SAM2, including fetching the image.
+
 ### Storage
 
 Media is never proxied by the API in the general case — the browser reads
