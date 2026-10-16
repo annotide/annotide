@@ -78,7 +78,9 @@
     "saveAnnotationError": "Failed to save annotation",
     "unsavedConfirm": "This item has unsaved changes. Leave without saving?",
     "missingRequired_one": "Fill in the required attribute before submitting: {{names}}",
-    "missingRequired_other": "Fill in {{count}} required attributes before submitting: {{names}}"
+    "missingRequired_other": "Fill in {{count}} required attributes before submitting: {{names}}",
+    "moreViolations_one": "and {{count}} more problem",
+    "moreViolations_other": "and {{count}} more problems"
   },
   "review": {
     "claimError": "Could not claim a review task",
@@ -281,7 +283,8 @@
     "segmenting": "Segmenting…",
     "superpixelsError": "Superpixels could not be computed: the image's storage does not allow the browser to read its pixels (CORS).",
     "imageLoadError": "This image could not be loaded.",
-    "imageLoadErrorHint": "The signed link may have expired, or the object is unreachable in its storage. Reload the page to mint a fresh one."
+    "imageLoadErrorHint": "The signed link may have expired, or the object is unreachable in its storage. Reload the page to mint a fresh one.",
+    "shapeNotAllowed": "“{{className}}” does not take {{shape}} shapes in this project. Choose a class that does, or another tool."
   },
   "pdf": {
     "loading": "Loading document…",
@@ -372,5 +375,14 @@
     "previousPage": "Previous page",
     "nextPage": "Next page",
     "pdfPage": "{{name}}, page {{page}}"
+  },
+  "shapeNames": {
+    "bbox": "box",
+    "rbox": "rotated box",
+    "polygon": "polygon",
+    "polyline": "polyline",
+    "point": "point",
+    "mask": "mask",
+    "keypoints": "keypoint"
   }
 }

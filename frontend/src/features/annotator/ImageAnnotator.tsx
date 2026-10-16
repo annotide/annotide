@@ -1059,6 +1059,22 @@ export function ImageAnnotator({
             {t('canvas.segmenting')}
           </p>
         )}
+        {drawing.refusal && !segmenting && (
+          <p
+            role="alert"
+            className="pointer-events-none absolute left-2 top-2 z-10 max-w-sm rounded
+              bg-surface/90 px-2 py-1 text-xs text-ink shadow"
+          >
+            {t('canvas.shapeNotAllowed', {
+              className:
+                classes.find((c) => c.name === drawing.refusal?.className)?.display_name ??
+                drawing.refusal.className,
+              shape: t(`shapeNames.${drawing.refusal.shapeType}`, {
+                defaultValue: drawing.refusal.shapeType,
+              }),
+            })}
+          </p>
+        )}
 
         {keyCursor && !readOnly && KEYBOARD_TOOLS.has(drawing.tool) && (
           <p

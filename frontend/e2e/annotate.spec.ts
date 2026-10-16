@@ -67,8 +67,16 @@ async function settledCanvas(page: Page, canvas: Locator): Promise<void> {
     .toBe(true)
 }
 
-/** The demo schema has no mask class; allow masks on its first class. */
-async function allowMasks(api: APIRequestContext, projectId: string): Promise<void> {
+/**
+ * Let the scratch project's first class take `tools` too. The demo schema has
+ * no class for masks, polylines or rotated boxes, and a class refuses shapes
+ * its tools do not list (QA-6).
+ */
+async function allowTools(
+  api: APIRequestContext,
+  projectId: string,
+  tools: string[],
+): Promise<void> {
   const schemas = (await (await api.get(`/api/v1/projects/${projectId}/schemas`)).json()) as Array<{
     version: number
     definition: { classes: Array<{ tools: string[] }> }
@@ -79,7 +87,7 @@ async function allowMasks(api: APIRequestContext, projectId: string): Promise<vo
     data: {
       ...latest.definition,
       version: latest.version + 1,
-      classes: [{ ...first, tools: [...first.tools, 'mask'] }, ...rest],
+      classes: [{ ...first, tools: [...new Set([...first.tools, ...tools])] }, ...rest],
     },
   })
   expect(schema.status(), await schema.text()).toBe(201)
@@ -115,7 +123,8 @@ test('drawing a box, undoing it and redoing it updates the shape list', async ({
   await expectShapeCount(page, initial + 1)
 })
 
-test('the polyline tool commits an open path on Enter', async ({ page, demo }) => {
+test('the polyline tool commits an open path on Enter', async ({ page, api, demo }) => {
+  await allowTools(api, demo.id, ['polyline'])
   const canvas = await openItem(page, demo.id, demo.firstItemId)
   const initial = await shapeCount(page)
 
@@ -137,7 +146,8 @@ test('the polyline tool commits an open path on Enter', async ({ page, demo }) =
   await expectShapeCount(page, initial)
 })
 
-test('the rotated box tool commits on the third click', async ({ page, demo }) => {
+test('the rotated box tool commits on the third click', async ({ page, api, demo }) => {
+  await allowTools(api, demo.id, ['rbox'])
   const canvas = await openItem(page, demo.id, demo.firstItemId)
   const initial = await shapeCount(page)
 
@@ -181,6 +191,28 @@ test('the smart polygon tool turns a dragged box into a model-drawn polygon (ML-
 
   await page.getByRole('button', { name: 'Undo' }).click()
   await expectShapeCount(page, initial)
+})
+
+test('the smart polygon refuses a class that takes boxes only, before asking the model', async ({
+  page,
+  demo,
+}) => {
+  // Demo schema: `sign` (hotkey 2) allows bbox only, so a polygon in it
+  // would fail on submit (QA-6). The canvas says so instead.
+  const canvas = await openItem(page, demo.id, demo.firstItemId)
+  const initial = await shapeCount(page)
+  await page.keyboard.press('2')
+  await page.getByRole('button', { name: /^Smart polygon/ }).click()
+
+  await dragBox(page, canvas, [0.3, 0.3], [0.6, 0.6])
+  await expect(page.getByRole('alert')).toContainText('does not take polygon shapes')
+  await expectShapeCount(page, initial)
+
+  // Back to a class that takes polygons: the message goes, drawing works.
+  await page.keyboard.press('1')
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  await dragBox(page, canvas, [0.3, 0.3], [0.6, 0.6])
+  await expectShapeCount(page, initial + 1)
 })
 
 test('saving a draft persists an annotation version with the drawn box', async ({
@@ -228,7 +260,7 @@ test('the brush paints a mask saved as COCO RLE, and the eraser removes it', asy
   api,
   demo,
 }) => {
-  await allowMasks(api, demo.id)
+  await allowTools(api, demo.id, ['mask'])
   const canvas = await openItem(page, demo.id, demo.firstItemId)
   const initial = await shapeCount(page)
 
@@ -317,7 +349,7 @@ test.describe('editing on a canvas that keeps its size', () => {
     api,
     demo,
   }) => {
-    await allowMasks(api, demo.id)
+    await allowTools(api, demo.id, ['mask'])
     const canvas = await openItem(page, demo.id, demo.firstItemId)
     const initial = await shapeCount(page)
 
