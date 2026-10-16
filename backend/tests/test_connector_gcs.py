@@ -442,7 +442,7 @@ class TestSignedUrl:
             bucket="acme-media", identity_type="account_key", secret=json.dumps(info)
         )
         url = await connector.signed_url("cat.jpg")
-        assert "storage.googleapis.com" in url
+        assert urlparse(url).hostname == "storage.googleapis.com"
 
     async def test_managed_identity_signs_via_iam_signblob(self) -> None:
         credentials = MagicMock()
