@@ -135,36 +135,41 @@ start_stack() {
     ( cd "$dir" && docker compose up -d --wait )
 }
 
+# True when /dev/tty can actually be opened. `[ -r /dev/tty ]` is not
+# enough: the device node exists (and is readable) even when the process has
+# no controlling terminal (cron, `ssh host 'curl ... | sh'`, cloud-init,
+# CI), and opening it then fails with ENXIO.
+tty_usable() {
+    ( : </dev/tty ) 2>/dev/null
+}
+
 # Reads $1 (a prompt) from the controlling terminal and echoes the answer
 # into $2 (a variable name, via eval — there is no `read -r var </dev/tty`
 # shortcut that also lets the caller suppress echo for passwords).
 prompt_visible() {
     prompt="$1"
-    if [ ! -r /dev/tty ]; then
-        return 1
-    fi
+    tty_usable || return 1
     printf '%s' "$prompt" >/dev/tty
-    IFS= read -r REPLY_VALUE </dev/tty
+    IFS= read -r REPLY_VALUE </dev/tty || return 1
     return 0
 }
 
 prompt_hidden() {
     prompt="$1"
-    if [ ! -r /dev/tty ]; then
-        return 1
-    fi
+    tty_usable || return 1
     printf '%s' "$prompt" >/dev/tty
     stty_saved=""
     if command -v stty >/dev/null 2>&1; then
         stty_saved=$(stty -g </dev/tty 2>/dev/null) || stty_saved=""
         [ -n "$stty_saved" ] && stty -echo </dev/tty 2>/dev/null || true
     fi
-    IFS= read -r REPLY_VALUE </dev/tty
+    read_status=0
+    IFS= read -r REPLY_VALUE </dev/tty || read_status=$?
     if [ -n "$stty_saved" ]; then
         stty "$stty_saved" </dev/tty 2>/dev/null || true
     fi
     printf '\n' >/dev/tty
-    return 0
+    return "$read_status"
 }
 
 # Creates the first administrator account. There is no sign-up flow by
