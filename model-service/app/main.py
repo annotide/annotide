@@ -161,6 +161,7 @@ async def info() -> InfoResponse:
     return InfoResponse(
         name=loaded.name,
         version=loaded.version,
+        task=getattr(loaded, "task", "detect"),
         media_types=loaded.media_types,
         classes=loaded.classes(),
         gpu=loaded.gpu,

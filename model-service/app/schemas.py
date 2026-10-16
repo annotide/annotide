@@ -423,7 +423,8 @@ class InfoResponse(BaseSchema):
 
     name: str
     version: str
-    task: Literal["detect"] = "detect"
+    #: `segment` for a prompt-driven segmenter (sam2), which does not pre-label.
+    task: Literal["detect", "segment"] = "detect"
     media_types: list[MediaType]
     classes: list[str]
     gpu: bool

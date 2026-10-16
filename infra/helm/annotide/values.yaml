@@ -16,6 +16,10 @@ image:
   model:
     repository: annotide-model
     tag: ""
+  # The model service with SAM2 baked in (`model.sam2: true`).
+  modelSam2:
+    repository: annotide-model-sam2
+    tag: ""
 imagePullSecrets: []
 
 nameOverride: ""
@@ -200,6 +204,11 @@ frontend:
 # their own model endpoints (BYOM) and register them in the UI.
 model:
   enabled: false
+  # Run annotide-model-sam2 instead: SAM 2.1 tiny for the smart polygon tool
+  # (ML-7), on CPU. Register it in the UI as a `segment` model at
+  # http://<release>-model:9000. Encoder output for the last
+  # SAM2_CACHE_ITEMS items (env, default 16, ~17 MB each) stays in memory.
+  sam2: false
   replicas: 1
   uid: 10001
   resources:

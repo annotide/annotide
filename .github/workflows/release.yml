@@ -14,8 +14,8 @@
 #   1. GHCR packages must be made public by hand after their first push
 #      (GitHub does not support "create as public" on first push):
 #      https://github.com/orgs/<owner>/packages -> each of
-#      annotide-backend, annotide-frontend, annotide-model and
-#      charts/annotide -> Package settings ->
+#      annotide-backend, annotide-frontend, annotide-model,
+#      annotide-model-sam2 and charts/annotide -> Package settings ->
 #      Change visibility -> Public. Until then `docker pull` / `helm pull`
 #      against them will 403 for anyone without repo access.
 #   2. PyPI trusted publishers: on pypi.org, register a GitHub publisher with
@@ -79,8 +79,9 @@ jobs:
           owner_lower=$(printf '%s' "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           echo "registry_owner=$owner_lower" >> "$GITHUB_OUTPUT"
 
-  # Three images, matrix-built: backend (also the worker), frontend and the
-  # reference model service.
+  # Four images, matrix-built: backend (also the worker), frontend, the
+  # reference model service and the same service with SAM2 baked in (the
+  # Dockerfile's `sam2` target, ML-7).
   images:
     name: image / ${{ matrix.name }}
     needs: version
@@ -99,6 +100,9 @@ jobs:
             context: ./frontend
           - name: model
             context: ./model-service
+          - name: model-sam2
+            context: ./model-service
+            target: sam2
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -133,6 +137,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: ${{ matrix.context }}
+          target: ${{ matrix.target }}
           platforms: linux/amd64,linux/arm64
           push: ${{ needs.version.outputs.is_dry_run != 'true' }}
           tags: ${{ steps.meta.outputs.tags }}

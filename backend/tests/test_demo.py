@@ -87,3 +87,33 @@ async def test_the_model_family_is_teacher_then_distilled_then_quantized_once(
     # External producers: prelabelling never offers them.
     models = (await session.scalars(select(Model))).all()
     assert all(model.endpoint_url is None for model in models)
+
+
+async def test_sam2_is_registered_only_when_its_profile_answers(session: AsyncSession) -> None:
+    org = uuid.uuid4()
+    probes: list[bool] = []
+
+    async def down() -> bool:
+        probes.append(False)
+        return False
+
+    async def up() -> bool:
+        probes.append(True)
+        return True
+
+    await demo._seed_sam2(session, org, running=down)
+    assert (await session.scalars(select(Model))).all() == []
+
+    await demo._seed_sam2(session, org, running=up)
+    await demo._seed_sam2(session, org, running=up)  # idempotent: no second probe
+    await session.commit()
+    models = (await session.scalars(select(Model))).all()
+    assert [(m.name, m.task, m.endpoint_url) for m in models] == [
+        (demo.DEMO_SAM2_MODEL_NAME, "segment", demo.DEMO_SAM2_URL)
+    ]
+    assert probes == [False, True]
+
+
+async def test_sam2_probe_is_false_when_nothing_answers(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(demo, "DEMO_SAM2_URL", "http://127.0.0.1:9")
+    assert await demo._sam2_running() is False
