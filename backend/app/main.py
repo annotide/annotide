@@ -63,7 +63,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(
         title="Annotide API",
-        version="0.1.0",
+        version=settings.version,
         summary="Cloud-agnostic annotation platform",
         description=(
             "Data stays in the customer's own storage; this API serves metadata, "

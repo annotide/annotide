@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import enum
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from typing import Final
 
@@ -65,6 +65,8 @@ class EffectiveLicense:
     host_mismatch_since: date | None = None
     #: The key in force was revoked (LIC-8); its last valid day.
     revoked_at: date | None = None
+    #: The key in force as held, for the refresh's proof of possession (LIC-27).
+    key: str | None = field(default=None, repr=False)
 
     @property
     def keyed(self) -> bool:
@@ -86,6 +88,7 @@ class _Verified:
     ended: date
     mismatch_since: date | None
     revoked_at: date | None
+    key: str = field(repr=False)
 
 
 def resolve(
@@ -127,7 +130,7 @@ def resolve(
             # mode, just Community again (LIC-34). It counts as no key.
             continue
         any_key = True
-        verified.append(_Verified(status, license_, source, ended, mismatch, revoked_at))
+        verified.append(_Verified(status, license_, source, ended, mismatch, revoked_at, key))
     for wanted in (LicenseStatus.VALID, LicenseStatus.EXPIRED):
         matches = [entry for entry in verified if entry.status is wanted]
         if matches:
@@ -140,6 +143,7 @@ def resolve(
                 today,
                 best.mismatch_since,
                 best.revoked_at,
+                best.key,
             )
     status = LicenseStatus.INVALID if any_key else LicenseStatus.COMMUNITY
     return EffectiveLicense(status, None, None, bool(keys), today)

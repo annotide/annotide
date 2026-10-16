@@ -98,9 +98,9 @@ async def start_trial(
             raise TrialUnavailableError(
                 "This installation or its host has already had a trial."
             ) from exc
-        raise TrialServiceError(vendor.describe(exc)) from exc
+        raise TrialServiceError(_failure(exc)) from exc
     except httpx.HTTPError as exc:
-        raise TrialServiceError(vendor.describe(exc)) from exc
+        raise TrialServiceError(_failure(exc)) from exc
     key = _key(response)
     candidate = resolve([(KeySource.TRIAL, key)], today=licence.today, host=host)
     if (
@@ -110,6 +110,14 @@ async def start_trial(
     ):
         raise TrialServiceError("The licence server returned a key that is not a usable trial.")
     await store_key(session, key, source=KeySource.TRIAL)
+
+
+def _failure(exc: httpx.HTTPError) -> str:
+    """The admin's message: a cold licence server is "try again", not a refusal."""
+    if vendor.is_waking(exc):
+        # Our call has woken it (it scales to zero); the next one is answered.
+        return "The licence server is starting up. Try again in a minute."
+    return vendor.describe(exc)
 
 
 def _key(response: httpx.Response) -> str:

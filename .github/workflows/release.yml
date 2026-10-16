@@ -137,6 +137,10 @@ jobs:
           push: ${{ needs.version.outputs.is_dry_run != 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # The backend bakes it in as `APP_VERSION` (the heartbeat and the
+          # licence refresh report it); the other images ignore it.
+          build-args: |
+            APP_VERSION=${{ needs.version.outputs.version }}
           provenance: mode=max
           sbom: true
           cache-from: type=gha,scope=${{ matrix.name }}

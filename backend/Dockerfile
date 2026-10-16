@@ -83,6 +83,12 @@ COPY alembic.ini ./
 
 RUN chown -R app:app /app
 
+# The release this image is, reported by the heartbeat and the licence refresh
+# (`APP_VERSION`, LIC-6): release.yml passes the tag's version, a local build
+# says "dev". Late in the file so a new version rebuilds no earlier layer.
+ARG APP_VERSION=dev
+ENV APP_VERSION=${APP_VERSION:-dev}
+
 USER app
 
 EXPOSE 8000

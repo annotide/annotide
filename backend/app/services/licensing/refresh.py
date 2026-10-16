@@ -10,6 +10,7 @@ On by default; failing or being switched off never changes behaviour. See
 
 from __future__ import annotations
 
+import hashlib
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, Final
 
@@ -19,7 +20,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.models import LicenseState
 from app.services.licensing import revocation, seats, vendor
-from app.services.licensing.heartbeat import VERSION, is_due
 from app.services.licensing.license import InvalidLicenseError, LicenseStatus, license_status
 from app.services.licensing.state import (
     EffectiveLicense,
@@ -52,18 +52,29 @@ def unavailable_reason(settings: Settings, licence: EffectiveLicense) -> str | N
     return None
 
 
+def key_digest(key: str) -> str:
+    """SHA-256 hex of the key as issued: proof the caller holds it, not just its id."""
+    return hashlib.sha256(key.strip().encode("utf-8")).hexdigest()
+
+
 def build_payload(
     settings: Settings, licence: EffectiveLicense, state: LicenseState | None, active_users: int
 ) -> dict[str, Any] | None:
-    """What the refresh sends; ``None`` without a verified key."""
-    if licence.license is None:
+    """What the refresh sends; ``None`` without a verified key.
+
+    ``key_digest`` lets the licence server tell the holder of a key from
+    someone who only learned its licence id (LIC-27): it hands out or binds a
+    key only for a digest of one it issued.
+    """
+    if licence.license is None or licence.key is None:
         return None
     return {
         "license_id": licence.license.license_id,
+        "key_digest": key_digest(licence.key),
         "install_id": settings.install_id,
         "host": settings.public_hostname or (state.last_host if state is not None else None),
         "active_users": active_users,
-        "version": VERSION,
+        "version": settings.version,
     }
 
 
@@ -100,9 +111,13 @@ async def refresh(
             await _accept(session, state, key, today=licence.today, host=payload["host"])
     except (httpx.HTTPError, _RejectedKeyError) as exc:
         state.refresh_error = vendor.describe(exc)
+        state.refresh_failures += 1
+        state.refresh_retry_at = vendor.next_attempt(exc, state.refresh_failures, moment)
         return state
     state.refresh_succeeded_at = moment
     state.refresh_error = None
+    state.refresh_failures = 0
+    state.refresh_retry_at = None
     return state
 
 
@@ -113,13 +128,16 @@ async def refresh_if_due(
     *,
     now: datetime | None = None,
 ) -> bool:
-    """The worker's daily refresh, retried hourly after a failure. The caller commits."""
+    """The worker's daily refresh, retried after a failure (`vendor.next_attempt`).
+
+    The caller commits.
+    """
     if not settings.license_refresh_enabled or not settings.license_server_url:
         return False
     moment = now or datetime.now(UTC)
     state = await get_state(session)
-    if state is not None and not is_due(
-        state.refresh_attempted_at, state.refresh_succeeded_at, REFRESH_INTERVAL, moment
+    if state is not None and not vendor.is_due(
+        state.refresh_retry_at, state.refresh_succeeded_at, REFRESH_INTERVAL, moment
     ):
         return False
     try:

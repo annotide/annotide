@@ -27,11 +27,7 @@ from app.services.licensing.fingerprint import (
 )
 from app.services.licensing.state import EffectiveLicense, effective_license, get_state
 
-#: Reported by the heartbeat and the licence refresh; matches `pyproject.toml`.
-VERSION: Final = "0.1.0"
 HEARTBEAT_INTERVAL: Final = timedelta(days=7)
-#: A failed call is not retried sooner than this.
-RETRY_AFTER: Final = timedelta(hours=1)
 
 NO_SALT_NOTICE: Final = (
     "No fingerprint salt is configured, so no organisation fingerprint "
@@ -97,29 +93,13 @@ def build_payload(
     )
     return {
         "install_id": settings.install_id,
-        "version": VERSION,
+        # `APP_VERSION`, baked into the release image (`backend/Dockerfile`).
+        "version": settings.version,
         # The tier of the licence in force (LIC-26), expired or not.
         "licence_type": licence.edition,
         "active_users": active_users,
         "fingerprint": fingerprint.as_payload(),
     }
-
-
-def is_due(
-    attempted_at: datetime | None,
-    succeeded_at: datetime | None,
-    interval: timedelta,
-    now: datetime,
-) -> bool:
-    """Due once ``interval`` has passed since the last success, at most hourly."""
-    if attempted_at is not None and now - _aware(attempted_at) < RETRY_AFTER:
-        return False
-    return succeeded_at is None or now - _aware(succeeded_at) >= interval
-
-
-def _aware(value: datetime) -> datetime:
-    # SQLite hands back naive datetimes; every stored timestamp is UTC.
-    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
 
 
 async def send_if_due(
@@ -138,8 +118,8 @@ async def send_if_due(
     moment = now or datetime.now(UTC)
     state = await get_state(session, create=True)
     assert state is not None  # create=True always returns a row
-    if not is_due(
-        state.heartbeat_attempted_at, state.heartbeat_sent_at, HEARTBEAT_INTERVAL, moment
+    if not vendor.is_due(
+        state.heartbeat_retry_at, state.heartbeat_sent_at, HEARTBEAT_INTERVAL, moment
     ):
         return False
     licence = await effective_license(session, settings, now=moment)
@@ -167,6 +147,10 @@ async def _send(
         await vendor.post(client, settings, "/v1/heartbeat", payload)
     except httpx.HTTPError as exc:
         state.heartbeat_error = vendor.describe(exc)
+        state.heartbeat_failures += 1
+        state.heartbeat_retry_at = vendor.next_attempt(exc, state.heartbeat_failures, now)
         return
     state.heartbeat_sent_at = now
     state.heartbeat_error = None
+    state.heartbeat_failures = 0
+    state.heartbeat_retry_at = None

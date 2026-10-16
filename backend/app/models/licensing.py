@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, String, Text, UniqueConstraint
+from sqlalchemy import Date, DateTime, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -59,5 +59,19 @@ class LicenseState(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     heartbeat_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     heartbeat_payload: Mapped[dict[str, object] | None] = mapped_column(JSONBType, nullable=True)
+    # When a failed call may run again and how many failed in a row: a cold
+    # licence server is retried after minutes, anything else hourly (`vendor.py`).
+    refresh_retry_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    refresh_failures: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    heartbeat_retry_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    heartbeat_failures: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     #: The latest verified revocation list from the licence refresh (LIC-8).
     revocations: Mapped[str | None] = mapped_column(Text, nullable=True)

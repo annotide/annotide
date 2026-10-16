@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LicensePage } from './LicensePage'
 import { api, ApiError } from '@/api/client'
+import { TRIAL_RETRY_DELAY_MS } from '@/api/queries'
 import type { LicenseInfo } from '@/api/types'
 
 vi.mock('@/api/client', async (importOriginal) => {
@@ -214,6 +215,44 @@ describe('LicensePage', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Start 30-day Business trial' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('already had a trial')
+  })
+
+  it('asks once more when the licence server was starting up', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      vi.mocked(api.getLicense).mockResolvedValue(COMMUNITY)
+      vi.mocked(api.startTrial)
+        .mockRejectedValueOnce(
+          new ApiError({
+            type: 'urn:annotation:error:trial-service',
+            title: 'Licence server unavailable',
+            status: 503,
+            detail: 'The licence server is starting up. Try again in a minute.',
+          }),
+        )
+        .mockResolvedValueOnce({
+          ...TEAM,
+          tier: 'trial',
+          source: 'trial',
+          seats: 25,
+          seat_limit: 27,
+          expires_at: '2099-01-01',
+          features: ALL_FEATURES,
+          trial_used: true,
+        })
+      renderPage()
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+
+      await user.click(await screen.findByRole('button', { name: 'Start 30-day Business trial' }))
+      expect(await screen.findByRole('button', { name: /licence server can take a minute/ })).toBeDisabled()
+      await vi.advanceTimersByTimeAsync(TRIAL_RETRY_DELAY_MS)
+
+      await waitFor(() => expect(api.startTrial).toHaveBeenCalledTimes(2))
+      expect(await screen.findByRole('region', { name: 'Edition' })).toHaveTextContent('Business trial')
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('offers no second trial', async () => {
