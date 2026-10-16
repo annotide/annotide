@@ -269,6 +269,9 @@ jobs:
         working-directory: ${{ matrix.package }}
         run: |
           v="${{ needs.version.outputs.version }}"
+          # The dry run's 0.0.0-dryrun is SemVer (image tags, the chart) but
+          # not a PEP 440 version, which setuptools refuses: use a dev release.
+          if [ "${{ needs.version.outputs.is_dry_run }}" = "true" ]; then v="0.0.0.dev0"; fi
           sed -i "s/^version = \".*\"/version = \"$v\"/" pyproject.toml
           grep -q "version = \"$v\"" pyproject.toml
 
