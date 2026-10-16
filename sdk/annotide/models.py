@@ -174,6 +174,10 @@ BBoxShape = TypedDict(
 )
 
 
+class BodySamlAcsApiV1AuthSamlAcsPost(TypedDict):
+    SAMLResponse: NotRequired[str | None]
+
+
 class BulkApprove(TypedDict):
     """
     Approve the latest `submitted` version of each item (WF-4 verdict
@@ -1920,6 +1924,7 @@ class AuthProviders(TypedDict):
 
     local: NotRequired[bool]
     oidc: NotRequired[OidcProviderInfo | None]
+    saml: NotRequired[OidcProviderInfo | None]
 
 
 class BodyUploadImportJobApiV1ProjectsProjectIdImportsUploadPost(TypedDict):

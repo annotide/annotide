@@ -93,6 +93,22 @@ oidc:
   # (Entra ID). Only if users cannot set their own address at the provider.
   trustUnverifiedEmail: false
 
+# -- SAML 2.0 single sign-on (AUTH-1, Business feature `sso`), beside or
+# instead of OIDC. Setting idpMetadataUrl turns it on; the ACS is
+# <publicUrl>/api/v1/auth/saml/acs and the SP metadata for the IdP is at
+# <publicUrl>/api/v1/auth/saml/metadata (docs/SAML.md).
+saml:
+  idpMetadataUrl: ""
+  # Only when the metadata describes several IdPs.
+  idpEntityId: ""
+  displayName: Single sign-on (SAML)
+  organizationSlug: ""
+  groupsAttribute: groups
+  adminGroups: ""
+  # Link sign-ins to existing accounts by e-mail. Only if users cannot set
+  # their own address at the IdP (Entra ID, Okta, Google Workspace).
+  trustEmail: false
+
 # -- OpenTelemetry (OPS-3). Needs a backend image built with
 # `--build-arg EXTRAS=otel`; the API and worker refuse to start otherwise.
 otel:

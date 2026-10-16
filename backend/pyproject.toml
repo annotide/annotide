@@ -38,6 +38,9 @@ dependencies = [
     # PDF items (TOOL): page-1 thumbnail and page count / sizes in `meta`.
     # PDFium (BSD-3 / Apache-2.0), bundled in the wheel; ~7 MB, no system deps.
     "pypdfium2>=4.30",
+    # SAML 2.0 sign-in (AUTH-1). Signatures are checked by the `xmlsec1`
+    # binary, a system package in the runtime image (Dockerfile).
+    "pysaml2>=7.5.5",
 ]
 
 [project.optional-dependencies]
@@ -119,6 +122,11 @@ follow_imports = "skip"
 [[tool.mypy.overrides]]
 # No type stubs published for pyvips or pypdfium2.
 module = ["pyvips", "pyvips.*", "pypdfium2", "pypdfium2.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# pysaml2 (SAML sign-in, AUTH-1) ships no type information.
+module = ["saml2", "saml2.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

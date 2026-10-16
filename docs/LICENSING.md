@@ -35,7 +35,7 @@ compliance need is Business:
 
 | Feature id | What it unlocks | Requirement |
 | ---------- | --------------- | ----------- |
-| `sso` | OIDC sign-in (Entra ID or any provider), including group and role sync from the ID token | AUTH-1, AUTH-3 |
+| `sso` | OIDC or SAML 2.0 sign-in (Entra ID, Okta or any provider), including group and role sync from the ID token or assertion | AUTH-1, AUTH-3 |
 | `scim` | SCIM 2.0 provisioning and its token | AUTH-3 |
 | `path_permissions` | Setting folder-level access (`membership.path_prefixes`) | item/folder permissions |
 | `audit_history` | Audit events older than 30 days | audit log |
@@ -226,7 +226,7 @@ security and never takes data away**:
 
 | Feature | What stops | What keeps working |
 | ------- | ---------- | ------------------ |
-| `sso` | OIDC sign-in and group sync | Local sign-in. The owner always gets in (LIC-36) and can give SSO-only users a password |
+| `sso` | OIDC and SAML sign-in and group sync | Local sign-in. The owner always gets in (LIC-36) and can give SSO-only users a password |
 | `scim` | The SCIM API and token | Users and groups SCIM created, as they are |
 | `path_permissions` | Setting or changing a member's folders | Existing folder limits, still enforced; removing a member |
 | `audit_history` | Reading audit events older than 30 days | Recording every event; the last 30 days |

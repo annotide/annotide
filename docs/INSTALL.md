@@ -132,7 +132,9 @@ connector a reference (`azurekeyvault://…`, `awssecrets://…`,
 - **Single sign-on:** set `APP_OIDC_ISSUER`, `APP_OIDC_CLIENT_ID` and, for a
   confidential client, `APP_OIDC_CLIENT_SECRET`. For Entra ID, see
   [ENTRA.md](ENTRA.md). Group-based roles use `APP_OIDC_ADMIN_GROUPS`, plus
-  group mappings on each project.
+  group mappings on each project. SAML 2.0 instead or as well: set
+  `APP_SAML_IDP_METADATA_URL` and `APP_SAML_ACS_URL` (chart: `saml.*`); see
+  [SAML.md](SAML.md) for Entra ID, Okta and Google Workspace.
 - **Provisioning:** SCIM 2.0 under Settings → Users (AUTH-3).
 - **E-mail:** set `APP_SMTP_HOST` and its companions (chart: `smtp.*`).
   People receive mentions, replies and review verdicts by e-mail and can turn

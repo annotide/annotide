@@ -316,6 +316,7 @@ def test_providers_lists_sso_when_configured(client: TestClient) -> None:
     assert body == {
         "local": True,
         "oidc": {"display_name": "Acme SSO", "login_path": "/auth/oidc/login"},
+        "saml": None,
     }
 
 
@@ -324,7 +325,7 @@ def test_providers_without_oidc(sessionmaker: async_sessionmaker[AsyncSession]) 
     application = create_app()
     with TestClient(application) as plain:
         body = plain.get("/api/v1/auth/providers").json()
-    assert body == {"local": True, "oidc": None}
+    assert body == {"local": True, "oidc": None, "saml": None}
 
 
 def test_oidc_routes_are_404_when_not_configured() -> None:

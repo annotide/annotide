@@ -4,8 +4,9 @@
 #   docker compose -f docker-compose.yml -f docker-compose.sso.yml up -d --wait keycloak backend worker
 #
 # The realm (infra/keycloak/annotation-realm.json) has groups `annotators`,
-# `reviewers`, `platform-admins` and users alice / carol; passwords and the
-# client secret are dev values only. Keycloak admin console:
+# `reviewers`, `platform-admins`, users alice / carol for OIDC and erin for
+# SAML (client `annotide-saml`); passwords and the client secret are dev
+# values only. Keycloak admin console:
 # http://localhost:8180 (admin / admin).
 #
 # One issuer, two networks: the browser reaches Keycloak on localhost:8180,
@@ -60,5 +61,13 @@ services:
       APP_OIDC_ORGANIZATION_SLUG: ${APP_OIDC_ORGANIZATION_SLUG:-default}
       APP_OIDC_GROUPS_CLAIM: groups
       APP_OIDC_ADMIN_GROUPS: platform-admins
+      # SAML 2.0 against the same realm (client `annotide-saml`, user erin).
+      # A person signs in through one protocol: the account links to one IdP subject.
+      APP_SAML_IDP_METADATA_URL: http://keycloak:8080/realms/annotation/protocol/saml/descriptor
+      APP_SAML_ACS_URL: ${SSO_FRONTEND_URL:-http://localhost:5174}/api/v1/auth/saml/acs
+      APP_SAML_SP_ENTITY_ID: annotide-saml
+      APP_SAML_DISPLAY_NAME: Keycloak SAML
+      APP_SAML_ORGANIZATION_SLUG: ${APP_OIDC_ORGANIZATION_SLUG:-default}
+      APP_SAML_ADMIN_GROUPS: platform-admins
 
   worker: *sso-app

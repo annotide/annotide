@@ -13,7 +13,7 @@ never sends media through the API: it reads and writes the customer's own
 object storage on short-lived signed URLs (ARC-3, `APP_SIGNED_URL_TTL`).
 The two exceptions are local disk and Databricks volumes, which go through
 an HMAC-signed proxy route. The API calls out to registered model
-endpoints, webhook receivers, SMTP, an optional OIDC provider, ML platforms,
+endpoints, webhook receivers, SMTP, an optional OIDC or SAML provider, ML platforms,
 and, if configured, the vendor licence server.
 
 ## Trust boundaries
@@ -27,6 +27,7 @@ and, if configured, the vendor licence server.
 | Browser → storage | Signed URLs scoped to one object, with a TTL; CORS checked | connectors' `signed_url`, `check()` |
 | Signed media proxy | HMAC over (connector, path, expiry), read and write scopes apart; served sandboxed (`Content-Security-Policy: sandbox`, PDFs excepted for the browser viewer; `nosniff`), anything but media, PDF and plain data as a download | `api/v1/storage.py`, `core/security.py` |
 | API → outside | Webhooks refuse private, loopback, link-local and metadata addresses (SEC-4); the HTTP connector stays under its `base_url`, and no connector redirect leads from a public host to an internal one or to metadata | `core/netguard.py`, `connectors/http.py`, `connectors/sharepoint.py` |
+| IdP → API (SAML) | Assertion or response signed by a key in the IdP metadata (`xmlsec1`), issuer, audience, destination, validity window, `InResponseTo` bound to the browser's signed flow cookie; IdP-initiated and transient NameIDs refused; XML parsed with defusedxml | `services/saml.py`, `api/v1/auth.py` |
 | Imports | Archives are capped in member count and unpacked size before anything is read | `importers/base.py::expand_archive` |
 | Reference model service | Optional bearer key (`MODEL_API_KEY`) on every route but the probes; media URLs must be http(s) and may not reach cloud metadata endpoints | `model-service/app/main.py`, `backends/heuristic.py::refuse_metadata_url` |
 | Secrets | Connectors and models hold references (`azurekeyvault://`, `awssecrets://`, `gcpsecrets://`, `env:`, `file:`), never values (AUTH-7) | `services/secrets/` |

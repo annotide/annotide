@@ -45,6 +45,7 @@ install: ## Install backend, SDK and model service (dev extras) and frontend dep
 	python3 -m venv backend/.venv
 	backend/.venv/bin/pip install --upgrade pip
 	backend/.venv/bin/pip install -e "backend[dev,otel]"
+	@command -v xmlsec1 >/dev/null || echo "note: SAML tests need xmlsec1 (brew install libxmlsec1 / apt install xmlsec1)"
 	python3 -m venv sdk/.venv
 	sdk/.venv/bin/pip install -e "sdk[dev]"
 	python3 -m venv model-service/.venv
