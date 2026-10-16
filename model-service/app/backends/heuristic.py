@@ -58,6 +58,7 @@ _NAMESPACE: Final = uuid.UUID("2c9c9f7a-3b1a-4f0e-9c1a-7a2b6d4e5f60")
 
 MAX_IMAGE_BYTES: Final = 20 * 1024 * 1024  # 20 MB cap on fetched images
 FETCH_TIMEOUT: Final = httpx.Timeout(connect=3.0, read=5.0, write=5.0, pool=3.0)
+MAX_FETCH_ADDRESSES: Final = 4  # addresses of one host tried, 3 s connect each
 
 #: Cloud instance-metadata endpoints. Media normally comes from the platform at
 #: a private address, so private ranges stay allowed; these never hold media and
@@ -157,23 +158,35 @@ async def fetch_image_bytes(url: str) -> bytes:
             raise ValueError(f"image exceeds {MAX_IMAGE_BYTES} byte cap")
         return raw
 
-    address = await resolve_media_url(url)
+    addresses = (await resolve_media_url(url))[:MAX_FETCH_ADDRESSES]
     target = httpx.URL(url)
-    # Connect to the address just checked rather than letting httpx resolve the
-    # name again (DNS rebinding); the Host header and the TLS name stay the
-    # original host, so virtual hosting, signed URLs and certificates still work.
+    async with httpx.AsyncClient(timeout=FETCH_TIMEOUT) as client:
+        # The next address on a failed connect, as a resolving client would:
+        # `localhost` is ::1 and 127.0.0.1, and a server may listen on one.
+        for address in addresses[:-1]:
+            try:
+                return await _fetch_from(client, target, address)
+            except (httpx.ConnectError, httpx.ConnectTimeout):
+                continue
+        return await _fetch_from(client, target, addresses[-1])
+
+
+async def _fetch_from(client: httpx.AsyncClient, target: httpx.URL, address: _Address) -> bytes:
+    """GET `target` from `address`, capped at `MAX_IMAGE_BYTES`.
+
+    Connects to the address checked rather than letting httpx resolve the name
+    again (DNS rebinding); the Host header and the TLS name stay the original
+    host, so virtual hosting, signed URLs and certificates still work.
+    """
     extensions: dict[str, Any] = {}
     if target.scheme == "https":
         extensions["sni_hostname"] = target.raw_host.decode("ascii")
-    async with (
-        httpx.AsyncClient(timeout=FETCH_TIMEOUT) as client,
-        client.stream(
-            "GET",
-            target.copy_with(host=str(address)),
-            headers={"Host": target.netloc.decode("ascii")},
-            extensions=extensions,
-        ) as response,
-    ):
+    async with client.stream(
+        "GET",
+        target.copy_with(host=str(address)),
+        headers={"Host": target.netloc.decode("ascii")},
+        extensions=extensions,
+    ) as response:
         response.raise_for_status()
         chunks = bytearray()
         async for chunk in response.aiter_bytes():
@@ -183,13 +196,13 @@ async def fetch_image_bytes(url: str) -> bytes:
         return bytes(chunks)
 
 
-async def resolve_media_url(url: str) -> _Address:
-    """Resolve the host of `url` once and return the address to fetch it from.
+async def resolve_media_url(url: str) -> list[_Address]:
+    """Resolve the host of `url` once and return the addresses to fetch it from.
 
     Raises `ValueError` unless `url` is http(s) and every address its host
     resolves to is allowed: never a cloud metadata endpoint, and, with
     `MODEL_FETCH_PRIVATE_NETWORKS` set, no non-public address outside it.
-    The caller connects to the returned address, and redirects are not
+    The caller connects to the returned addresses, and redirects are not
     followed, so the address checked is the one fetched.
     """
     parts = urlsplit(url)
@@ -226,7 +239,7 @@ async def resolve_media_url(url: str) -> _Address:
             raise ValueError(
                 f"media URL points at {effective}, outside MODEL_FETCH_PRIVATE_NETWORKS"
             )
-    return addresses[0]
+    return list(dict.fromkeys(addresses))
 
 
 def _private_networks() -> tuple[_Network, ...] | None:

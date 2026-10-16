@@ -66,6 +66,10 @@ async def test_fetch_refuses_before_connecting() -> None:
         await fetch_image_bytes("http://169.254.169.254/latest/meta-data/")
 
 
+def _family(address: str) -> socket.AddressFamily:
+    return socket.AF_INET6 if ":" in address else socket.AF_INET
+
+
 def _resolve_to(monkeypatch: pytest.MonkeyPatch, *addresses: str) -> list[str]:
     """Answer every name lookup with `addresses`; return the names looked up.
 
@@ -78,8 +82,8 @@ def _resolve_to(monkeypatch: pytest.MonkeyPatch, *addresses: str) -> list[str]:
             ipaddress.ip_address(host)
         except ValueError:
             looked_up.append(host)
-            return [(socket.AF_INET, socket.SOCK_STREAM, 0, "", (a, port)) for a in addresses]
-        return [(socket.AF_INET, socket.SOCK_STREAM, 0, "", (host, port))]
+            return [(_family(a), socket.SOCK_STREAM, 0, "", (a, port)) for a in addresses]
+        return [(_family(host), socket.SOCK_STREAM, 0, "", (host, port))]
 
     monkeypatch.setattr(asyncio.get_running_loop(), "getaddrinfo", resolve)
     return looked_up
@@ -162,3 +166,14 @@ async def test_fetch_connects_to_the_checked_address(
     request_line, *header_lines = heads[0].decode().split("\r\n")
     assert request_line == "GET /a.png?sig=x%2F HTTP/1.1"
     assert f"Host: media.example:{port}" in header_lines
+
+
+async def test_fetch_falls_back_to_the_next_checked_address(
+    monkeypatch: pytest.MonkeyPatch, media_server: tuple[int, list[bytes]]
+) -> None:
+    """`localhost` resolves to ::1 first on Linux, with the server on 127.0.0.1 only."""
+    port, heads = media_server
+    _resolve_to(monkeypatch, "::1", "127.0.0.1")
+
+    assert await fetch_image_bytes(f"http://localhost:{port}/a.png") == b"image"
+    assert f"Host: localhost:{port}" in heads[0].decode().split("\r\n")
