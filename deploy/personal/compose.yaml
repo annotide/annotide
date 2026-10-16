@@ -27,8 +27,13 @@ x-app-env: &app-env
   APP_SECRET_KEY: ${APP_SECRET_KEY:?Set APP_SECRET_KEY in .env (install.sh does this for you)}
   APP_SECRET_KEY_PREVIOUS: ${APP_SECRET_KEY_PREVIOUS:-}
   APP_SIGNED_URL_TTL: ${APP_SIGNED_URL_TTL:-900}
-  # How the bundled model service reaches the API for local-disk media.
-  APP_INTERNAL_API_URL: http://backend:8000
+  # How a model service reaches the API for local-disk media: the bundled
+  # ones by the compose network; a model on another machine needs this
+  # install's own address, e.g. https://annotate.example.com.
+  APP_INTERNAL_API_URL: ${APP_INTERNAL_API_URL:-http://backend:8000}
+  # The key a model service asks for (its MODEL_API_KEY), for registering a
+  # model with identity `bearer` and secret reference env:MODEL_API_KEY.
+  MODEL_API_KEY: ${MODEL_API_KEY:-}
   APP_CORS_ORIGINS: ${APP_CORS_ORIGINS:-http://localhost:${ANNOTIDE_PORT:-8080}}
   APP_FRONTEND_URL: ${APP_FRONTEND_URL:-http://localhost:${ANNOTIDE_PORT:-8080}}
   APP_TRUSTED_PROXIES: ${APP_TRUSTED_PROXIES:-}
@@ -52,6 +57,29 @@ x-app-env: &app-env
   APP_LICENSE_SERVER_URL: ${APP_LICENSE_SERVER_URL-https://licence.annotide.com}
   APP_LICENSE_REFRESH_ENABLED: ${APP_LICENSE_REFRESH_ENABLED:-true}
   APP_TELEMETRY_ENABLED: ${APP_TELEMETRY_ENABLED:-true}
+  # Single sign-on (AUTH-1), a Business licence feature: OIDC, SAML 2.0, or
+  # both. Off until an issuer or IdP metadata is set; ignored without a
+  # licence that includes `sso`. Needs the install on a public https address
+  # behind a reverse proxy (README.md, "Single sign-on").
+  APP_OIDC_ISSUER: ${APP_OIDC_ISSUER:-}
+  APP_OIDC_CLIENT_ID: ${APP_OIDC_CLIENT_ID:-}
+  APP_OIDC_CLIENT_SECRET: ${APP_OIDC_CLIENT_SECRET:-}
+  APP_OIDC_REDIRECT_URI: ${APP_OIDC_REDIRECT_URI:-}
+  APP_OIDC_DISPLAY_NAME: ${APP_OIDC_DISPLAY_NAME:-Single sign-on}
+  APP_OIDC_ORGANIZATION_SLUG: ${APP_OIDC_ORGANIZATION_SLUG:-}
+  APP_OIDC_AUTO_PROVISION: ${APP_OIDC_AUTO_PROVISION:-true}
+  APP_OIDC_TRUST_UNVERIFIED_EMAIL: ${APP_OIDC_TRUST_UNVERIFIED_EMAIL:-false}
+  APP_OIDC_GROUPS_CLAIM: ${APP_OIDC_GROUPS_CLAIM:-groups}
+  APP_OIDC_ADMIN_GROUPS: ${APP_OIDC_ADMIN_GROUPS:-}
+  APP_SAML_IDP_METADATA_URL: ${APP_SAML_IDP_METADATA_URL:-}
+  APP_SAML_ACS_URL: ${APP_SAML_ACS_URL:-}
+  APP_SAML_IDP_ENTITY_ID: ${APP_SAML_IDP_ENTITY_ID:-}
+  APP_SAML_DISPLAY_NAME: ${APP_SAML_DISPLAY_NAME:-Single sign-on (SAML)}
+  APP_SAML_ORGANIZATION_SLUG: ${APP_SAML_ORGANIZATION_SLUG:-}
+  APP_SAML_AUTO_PROVISION: ${APP_SAML_AUTO_PROVISION:-true}
+  APP_SAML_TRUST_EMAIL: ${APP_SAML_TRUST_EMAIL:-false}
+  APP_SAML_GROUPS_ATTRIBUTE: ${APP_SAML_GROUPS_ATTRIBUTE:-groups}
+  APP_SAML_ADMIN_GROUPS: ${APP_SAML_ADMIN_GROUPS:-}
   APP_LOG_LEVEL: ${APP_LOG_LEVEL:-INFO}
   APP_LOG_FORMAT: ${APP_LOG_FORMAT:-json}
   APP_OTEL_ENABLED: "false"
@@ -149,6 +177,23 @@ services:
       MODEL_API_KEY: ${MODEL_API_KEY:-}
       OCR_ENGINE: ${OCR_ENGINE:-auto}
       OCR_LANGUAGES: ${OCR_LANGUAGES:-eng}
+
+  # SAM2 for the Smart polygon tool (ML-7): click an object or drag a box and
+  # get its outline. Runs on the CPU, no GPU needed; the image is about 1 GB.
+  # Off by default; add `sam2` to COMPOSE_PROFILES in .env to start it, then
+  # register it in the app under Models as task "Segment" with the endpoint
+  # http://model-sam2:9000 (see README.md).
+  model-sam2:
+    image: ${ANNOTIDE_REGISTRY:-ghcr.io/annotide}/annotide-model-sam2:${ANNOTIDE_VERSION:-latest}
+    restart: unless-stopped
+    profiles: ["sam2"]
+    environment:
+      # Same key as the reference model service, if you set one.
+      MODEL_API_KEY: ${MODEL_API_KEY:-}
+      # Images whose encoding stays in memory (~17 MB each); later clicks on
+      # them take tens of milliseconds instead of about a second.
+      SAM2_CACHE_ITEMS: ${SAM2_CACHE_ITEMS:-16}
+      OCR_ENGINE: none
 
 volumes:
   postgres_data:

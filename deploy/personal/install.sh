@@ -111,6 +111,9 @@ APP_INSTALL_ID=$install_id
 # Start the bundled reference model service (an offline heuristic detector,
 # no GPU, no weights) alongside the rest of the stack:
 # COMPOSE_PROFILES=models
+# Or SAM2 for the Smart polygon tool (CPU, a ~1 GB image), or both:
+# COMPOSE_PROFILES=sam2
+# COMPOSE_PROFILES=models,sam2
 
 # Pin a specific release, or point at a different registry/mirror:
 # ANNOTIDE_VERSION=latest

@@ -64,6 +64,53 @@ Common ones:
   pre-labelling. Without it, register your own model endpoint in the UI.
 - `MODEL_BACKEND` / `MODEL_PATH` — point the bundled model service at a
   real ONNX detector instead of the heuristic one (needs `COMPOSE_PROFILES=models`).
+- `COMPOSE_PROFILES=sam2` — starts SAM2 for the Smart polygon tool (below).
+  With the reference model too: `COMPOSE_PROFILES=models,sam2`.
+
+### Smart polygon with SAM2
+
+SAM2 outlines the object you click, or the one inside a box you drag, in the
+annotator's Smart polygon tool (`S`). It runs on the CPU in its own
+container (`annotide-model-sam2`, about 1 GB) and keeps your images on this
+machine.
+
+1. Add `COMPOSE_PROFILES=sam2` to `.env`, then `docker compose up -d`.
+2. In the app, open **Models** → **Register model**: any name, **Task**
+   *Segment*, **Endpoint URL** `http://model-sam2:9000`.
+3. In the annotator, press `S`, pick the model under **Smart polygon**, and
+   click an object.
+
+The first click on an image takes about a second while SAM2 reads the image;
+further clicks on it answer in tens of milliseconds. The last
+`SAM2_CACHE_ITEMS` images (default 16, about 17 MB of memory each) stay
+ready. The class you draw in must allow polygons; the canvas says so if it
+does not.
+
+#### SAM2 on another machine
+
+SAM2 is a plain HTTP service, so it can run anywhere this install can
+reach, for example a machine with more CPU:
+
+```sh
+docker run -d --restart unless-stopped -p 9000:9000 \
+  -e MODEL_API_KEY=<a long random key> -e OCR_ENGINE=none \
+  ghcr.io/annotide/annotide-model-sam2:latest
+```
+
+The annotator never talks to it directly: on a click, this install sends
+SAM2 the click and a short-lived link to the image, SAM2 fetches the image
+from that link and answers with the outline. So:
+
+- **This install must reach SAM2.** Put HTTPS in front of it when the
+  traffic leaves your network, and set the key: `MODEL_API_KEY` in this
+  install's `.env` as well, then register the model with **Endpoint URL**
+  `https://sam2.example.com`, **Identity** `bearer`, **Secret reference**
+  `env:MODEL_API_KEY`.
+- **SAM2 must reach the images.** With cloud storage (Azure Blob, S3, GCS)
+  the link points at the storage itself. With local disk it points back at
+  this install, so set `APP_INTERNAL_API_URL` to this install's address as
+  SAM2 sees it, e.g. `https://annotate.example.com`.
+- A click waits at most 8 seconds for SAM2, including fetching the image.
 
 ### Storage
 
@@ -89,6 +136,38 @@ the install beyond loopback (changing the published port's bind address,
 or port-forwarding it), put a TLS-terminating reverse proxy in front of it
 first; otherwise sign-in cookies will not be sent and login will silently
 fail.
+
+### Single sign-on (Business)
+
+Sign-in through your identity provider (Entra ID, Okta, Google Workspace,
+Keycloak, …) over OIDC or SAML 2.0 needs a licence with the `sso` feature
+(Business) and the install on a public **https** address: the provider
+sends people back to it, and browsers drop the sign-in cookie otherwise.
+Put a TLS-terminating reverse proxy in front first (above), then add to
+`.env`, with `https://annotate.example.com` as your address:
+
+```sh
+APP_FRONTEND_URL=https://annotate.example.com
+APP_CORS_ORIGINS=https://annotate.example.com
+APP_TRUSTED_PROXIES=<your proxy's address>
+
+# OIDC (Entra ID: docs/ENTRA.md)
+APP_OIDC_ISSUER=https://login.microsoftonline.com/<tenant-id>/v2.0
+APP_OIDC_CLIENT_ID=<client id>
+APP_OIDC_CLIENT_SECRET=<client secret>
+APP_OIDC_REDIRECT_URI=https://annotate.example.com/api/v1/auth/oidc/callback
+
+# or SAML 2.0 (docs/SAML.md); register Entity ID
+# https://annotate.example.com/api/v1/auth/saml/metadata at the IdP
+APP_SAML_IDP_METADATA_URL=<the IdP's metadata URL>
+APP_SAML_ACS_URL=https://annotate.example.com/api/v1/auth/saml/acs
+```
+
+then `docker compose up -d`. The login page shows a *Sign in with …*
+button beside the local form; the local admin account keeps working. The
+compose file forwards the common `APP_OIDC_*` and `APP_SAML_*` settings
+(admin groups, provisioning, e-mail linking); the full list is in
+[`docs/CONTRACTS.md`](../../docs/CONTRACTS.md#environment-variables-ops-1).
 
 ## Upgrade
 
