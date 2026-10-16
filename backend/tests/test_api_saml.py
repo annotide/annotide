@@ -11,6 +11,7 @@ tests exercise the same verification production does. Like
 from __future__ import annotations
 
 import base64
+import time
 from collections.abc import AsyncIterator, Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -58,6 +59,7 @@ from app.models import (
     User,
 )
 from app.services.saml import (
+    METADATA_TTL_SECONDS,
     MemoryUsedRequests,
     SamlClient,
     SamlError,
@@ -609,7 +611,9 @@ async def test_metadata_from_a_url_survives_a_failed_refresh(
     location, _ = await client.login_url(None)
     assert location.startswith(IDP_SSO)
     up = False
-    client._metadata_at = 0.0  # due for a refresh
+    # Due for a refresh: an hour back on the monotonic clock, not 0.0, which
+    # is only minutes ago on a machine that booted minutes ago (CI runners).
+    client._metadata_at = time.monotonic() - METADATA_TTL_SECONDS - 1
     location, _ = await client.login_url(None)
     assert location.startswith(IDP_SSO)
     assert len(calls) == 2
