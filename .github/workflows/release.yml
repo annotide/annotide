@@ -246,7 +246,10 @@ jobs:
     name: pypi / ${{ matrix.package }}
     needs: version
     runs-on: ubuntu-latest
-    environment: ${{ matrix.package == 'sdk' && 'pypi' || 'pypi-training' }}
+    # No environment on a dry run: the environments only admit `v*` tags, so
+    # a run from main would stop at "not allowed to deploy" before building.
+    # The publish step is skipped on a dry run anyway; the build still runs.
+    environment: ${{ needs.version.outputs.is_dry_run != 'true' && (matrix.package == 'sdk' && 'pypi' || 'pypi-training') || '' }}
     permissions:
       contents: read
       id-token: write
