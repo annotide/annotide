@@ -111,6 +111,38 @@ or port-forwarding it), put a TLS-terminating reverse proxy in front of it
 first; otherwise sign-in cookies will not be sent and login will silently
 fail.
 
+### Single sign-on (Business)
+
+Sign-in through your identity provider (Entra ID, Okta, Google Workspace,
+Keycloak, …) over OIDC or SAML 2.0 needs a licence with the `sso` feature
+(Business) and the install on a public **https** address: the provider
+sends people back to it, and browsers drop the sign-in cookie otherwise.
+Put a TLS-terminating reverse proxy in front first (above), then add to
+`.env`, with `https://annotate.example.com` as your address:
+
+```sh
+APP_FRONTEND_URL=https://annotate.example.com
+APP_CORS_ORIGINS=https://annotate.example.com
+APP_TRUSTED_PROXIES=<your proxy's address>
+
+# OIDC (Entra ID: docs/ENTRA.md)
+APP_OIDC_ISSUER=https://login.microsoftonline.com/<tenant-id>/v2.0
+APP_OIDC_CLIENT_ID=<client id>
+APP_OIDC_CLIENT_SECRET=<client secret>
+APP_OIDC_REDIRECT_URI=https://annotate.example.com/api/v1/auth/oidc/callback
+
+# or SAML 2.0 (docs/SAML.md); register Entity ID
+# https://annotate.example.com/api/v1/auth/saml/metadata at the IdP
+APP_SAML_IDP_METADATA_URL=<the IdP's metadata URL>
+APP_SAML_ACS_URL=https://annotate.example.com/api/v1/auth/saml/acs
+```
+
+then `docker compose up -d`. The login page shows a *Sign in with …*
+button beside the local form; the local admin account keeps working. The
+compose file forwards the common `APP_OIDC_*` and `APP_SAML_*` settings
+(admin groups, provisioning, e-mail linking); the full list is in
+[`docs/CONTRACTS.md`](../../docs/CONTRACTS.md#environment-variables-ops-1).
+
 ## Upgrade
 
 ```sh
