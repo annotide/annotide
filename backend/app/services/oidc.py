@@ -44,7 +44,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings, get_settings
 from app.core.security import ALGORITHM, OWN_TOKEN_OPTIONS
 from app.models import Organization, User
-from app.services import audit
+from app.services import audit, group_sync, scim
 from app.services.licensing import seats
 from app.services.licensing.state import effective_license
 
@@ -121,6 +121,29 @@ class Identity:
     #: The provider vouches for `email` (`email_verified`). False for an
     #: address read from `preferred_username` / `upn` or without the claim.
     email_verified: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class SignInPolicy:
+    """How a verified identity becomes a user: the same rules for OIDC and SAML."""
+
+    #: `oidc` or `saml`, recorded on audit events.
+    method: str
+    auto_provision: bool
+    #: Link an existing account by e-mail without the IdP vouching for it.
+    trust_email: bool
+    organization_slug: str | None
+    #: The setting that names the organisation, for the error message.
+    organization_setting: str = "APP_OIDC_ORGANIZATION_SLUG"
+
+
+def oidc_policy(settings: Settings) -> SignInPolicy:
+    return SignInPolicy(
+        method="oidc",
+        auto_provision=settings.oidc_auto_provision,
+        trust_email=settings.oidc_trust_unverified_email,
+        organization_slug=settings.oidc_organization_slug,
+    )
 
 
 # --- Flow cookie -------------------------------------------------------------
@@ -502,6 +525,7 @@ async def resolve_user(
     settings: Settings,
     client_ip: str | None,
     host: str | None = None,
+    policy: SignInPolicy | None = None,
 ) -> User:
     """Find or provision the user an ID token refers to. The caller commits.
 
@@ -511,7 +535,9 @@ async def resolve_user(
     provider, an account SCIM created, or ``APP_OIDC_TRUST_UNVERIFIED_EMAIL``: a provider
     that lets people type in any address would otherwise hand
     ``admin@acme.com``'s account to whoever registers that address there.
+    ``policy`` defaults to the ``APP_OIDC_*`` settings; SAML passes its own.
     """
+    policy = policy or oidc_policy(settings)
     user = await session.scalar(select(User).where(User.idp_subject == identity.subject))
     if user is None:
         user = await session.scalar(select(User).where(User.email == identity.email))
@@ -523,9 +549,7 @@ async def resolve_user(
                 )
             # An account SCIM pushed came from the provider's own directory.
             trusted = (
-                identity.email_verified
-                or settings.oidc_trust_unverified_email
-                or user.scim_external_id is not None
+                identity.email_verified or policy.trust_email or user.scim_external_id is not None
             )
             if not trusted:
                 raise OidcError(
@@ -544,9 +568,9 @@ async def resolve_user(
                 ip=client_ip,
             )
     if user is None:
-        if not settings.oidc_auto_provision:
+        if not policy.auto_provision:
             raise OidcError("not_provisioned", f"no account for {identity.email}")
-        organization = await _provisioning_organization(session, settings)
+        organization = await _provisioning_organization(session, policy)
         user = User(
             organization_id=organization.id,
             email=identity.email,
@@ -565,7 +589,7 @@ async def resolve_user(
             action="user.provision",
             target_type="user",
             target_id=user.id,
-            after={"email": identity.email, "method": "oidc"},
+            after={"email": identity.email, "method": policy.method},
             ip=client_ip,
         )
     if not user.is_active:
@@ -576,7 +600,7 @@ async def resolve_user(
             action="auth.login_failed",
             target_type="user",
             target_id=user.id,
-            after={"reason": "inactive", "method": "oidc"},
+            after={"reason": "inactive", "method": policy.method},
             ip=client_ip,
         )
         raise OidcError("inactive", f"account {user.id} is inactive")
@@ -589,7 +613,7 @@ async def resolve_user(
             action="auth.login_failed",
             target_type="user",
             target_id=user.id,
-            after={"reason": "seat_limit", "method": "oidc"},
+            after={"reason": "seat_limit", "method": policy.method},
             ip=client_ip,
         )
         raise OidcError("seat_limit", f"no free licence seat for account {user.id}")
@@ -601,28 +625,54 @@ async def resolve_user(
         action="auth.login",
         target_type="user",
         target_id=user.id,
-        after={"method": "oidc"},
+        after={"method": policy.method},
         ip=client_ip,
     )
     return user
 
 
-async def _provisioning_organization(session: AsyncSession, settings: Settings) -> Organization:
-    if settings.oidc_organization_slug:
+async def complete_sign_in(
+    session: AsyncSession,
+    identity: Identity,
+    *,
+    settings: Settings,
+    policy: SignInPolicy | None,
+    admin_groups: str | None,
+    client_ip: str | None,
+    host: str | None,
+) -> User:
+    """Shared by OIDC and SAML: find or provision the user, then sync groups. The caller commits."""
+    user = await resolve_user(
+        session, identity, settings=settings, client_ip=client_ip, host=host, policy=policy
+    )
+    # Once the IdP pushes groups over SCIM, those are the groups (AUTH-3).
+    if identity.groups is not None and not await scim.has_groups(session, user.organization_id):
+        await group_sync.sync_groups(
+            session,
+            user,
+            identity.groups,
+            admin_groups=group_sync.parse_admin_groups(admin_groups),
+            ip=client_ip,
+        )
+    return user
+
+
+async def _provisioning_organization(session: AsyncSession, policy: SignInPolicy) -> Organization:
+    if policy.organization_slug:
         organization = await session.scalar(
-            select(Organization).where(Organization.slug == settings.oidc_organization_slug)
+            select(Organization).where(Organization.slug == policy.organization_slug)
         )
         if organization is None:
             raise OidcError(
                 "no_organization",
-                f"APP_OIDC_ORGANIZATION_SLUG={settings.oidc_organization_slug!r} does not exist",
+                f"{policy.organization_setting}={policy.organization_slug!r} does not exist",
             )
         return organization
     count = await session.scalar(select(func.count()).select_from(Organization))
     if count != 1:
         raise OidcError(
             "no_organization",
-            f"{count} organisations exist; set APP_OIDC_ORGANIZATION_SLUG to pick one",
+            f"{count} organisations exist; set {policy.organization_setting} to pick one",
         )
     only = (await session.scalars(select(Organization))).first()
     assert only is not None  # count == 1 above
@@ -650,11 +700,14 @@ __all__ = [
     "OidcDisabledError",
     "OidcError",
     "ProviderMetadata",
+    "SignInPolicy",
+    "complete_sign_in",
     "decode_flow",
     "encode_flow",
     "get_oidc_client",
     "identity_from_claims",
     "new_flow",
+    "oidc_policy",
     "resolve_user",
     "safe_next_path",
 ]

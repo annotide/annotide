@@ -914,6 +914,16 @@
                 "type": "null"
               }
             ]
+          },
+          "saml": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OidcProviderInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "title": "AuthProviders",
@@ -1038,6 +1048,23 @@
           "bbox"
         ],
         "title": "BBoxShape",
+        "type": "object"
+      },
+      "Body_saml_acs_api_v1_auth_saml_acs_post": {
+        "properties": {
+          "SAMLResponse": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Samlresponse"
+          }
+        },
+        "title": "Body_saml_acs_api_v1_auth_saml_acs_post",
         "type": "object"
       },
       "Body_upload_import_job_api_v1_projects__project_id__imports_upload_post": {
@@ -12109,6 +12136,118 @@
           }
         },
         "summary": "Which sign-in methods this installation offers",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/saml/acs": {
+      "post": {
+        "description": "The IdP's HTTP-POST target.\n\nEvery failure ends at ``{frontend}/login?error=<code>``, like the OIDC\ncallback. A response is accepted only if it answers the request id in\nthis browser's flow cookie, so IdP-initiated sign-in is refused.",
+        "operationId": "saml_acs_api_v1_auth_saml_acs_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "saml_flow",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Saml Flow"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_saml_acs_api_v1_auth_saml_acs_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "303": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Complete SAML single sign-on: the Assertion Consumer Service (AUTH-1)",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/saml/login": {
+      "get": {
+        "description": "Redirect the browser to the IdP with an AuthnRequest (HTTP-Redirect binding).",
+        "operationId": "saml_login_api_v1_auth_saml_login_get",
+        "parameters": [
+          {
+            "description": "Path to open after sign-in",
+            "in": "query",
+            "name": "next",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Path to open after sign-in",
+              "title": "Next"
+            }
+          }
+        ],
+        "responses": {
+          "303": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start SAML single sign-on (AUTH-1)",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/saml/metadata": {
+      "get": {
+        "description": "Entity id, ACS URL and binding: what an IdP admin uploads or points at.",
+        "operationId": "saml_metadata_api_v1_auth_saml_metadata_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          }
+        },
+        "summary": "This service provider's SAML metadata, for the IdP (AUTH-1)",
         "tags": [
           "auth"
         ]

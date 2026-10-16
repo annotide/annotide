@@ -1081,6 +1081,8 @@ export interface OidcProviderInfo {
 export interface AuthProviders {
   local: boolean
   oidc: OidcProviderInfo | null
+  /** SAML 2.0 (AUTH-1): the same shape, its own `login_path`. */
+  saml?: OidcProviderInfo | null
 }
 
 // ---------------------------------------------------------------------------

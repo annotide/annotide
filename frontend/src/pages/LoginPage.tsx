@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { api, ApiError, useAuthProviders } from '@/api'
+import type { OidcProviderInfo } from '@/api/types'
 import { Button } from '@/components/Button'
 import { DocumentTitle } from '@/components/DocumentTitle'
 import { LanguageSelect } from '@/components/LanguageSelect'
@@ -15,7 +16,10 @@ interface LocationState {
   from?: string
 }
 
-/** The `?error=` codes the OIDC callback redirects back with (`services/oidc.py`). */
+/**
+ * The `?error=` codes the OIDC callback and the SAML ACS redirect back with
+ * (`services/oidc.py`, `services/saml.py`).
+ */
 const SSO_ERROR_CODES = [
   'provider_denied',
   'provider_unreachable',
@@ -31,6 +35,9 @@ const SSO_ERROR_CODES = [
   'inactive',
   'seat_limit',
   'login_required',
+  'invalid_response',
+  'unsupported_name_id',
+  'no_idp',
 ] as const
 
 type SsoErrorCode = (typeof SSO_ERROR_CODES)[number]
@@ -73,7 +80,9 @@ export function LoginPage(): JSX.Element {
 
   const redirectTo = (location.state as LocationState | null)?.from ?? '/'
   const ssoErrorCode = searchParams.get('error')
-  const ssoProvider = providers.data?.oidc ?? null
+  const ssoProviders = [providers.data?.oidc, providers.data?.saml].filter(
+    (provider): provider is OidcProviderInfo => provider != null,
+  )
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
@@ -126,17 +135,20 @@ export function LoginPage(): JSX.Element {
             </p>
           )}
 
-          {ssoProvider && (
+          {ssoProviders.length > 0 && (
             <>
-              <a
-                href={api.oidcLoginUrl(ssoProvider, redirectTo)}
-                className="mb-4 inline-flex w-full items-center justify-center rounded-md border
-                  border-line px-3 py-2 text-sm font-medium hover:bg-line/30
-                  focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1
-                  focus-visible:outline-accent"
-              >
-                {t('signIn.withProvider', { provider: ssoProvider.display_name })}
-              </a>
+              {ssoProviders.map((provider) => (
+                <a
+                  key={provider.login_path}
+                  href={api.oidcLoginUrl(provider, redirectTo)}
+                  className="mb-4 inline-flex w-full items-center justify-center rounded-md border
+                    border-line px-3 py-2 text-sm font-medium hover:bg-line/30
+                    focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1
+                    focus-visible:outline-accent"
+                >
+                  {t('signIn.withProvider', { provider: provider.display_name })}
+                </a>
+              ))}
               <div className="mb-4 flex items-center gap-3 text-xs uppercase text-muted">
                 <span className="h-px flex-1 bg-line" aria-hidden="true" />
                 {t('signIn.or')}

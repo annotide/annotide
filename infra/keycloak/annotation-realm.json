@@ -58,6 +58,78 @@
           }
         }
       ]
+    },
+    {
+      "clientId": "annotide-saml",
+      "name": "Annotide SAML (dev)",
+      "enabled": true,
+      "protocol": "saml",
+      "frontchannelLogout": false,
+      "redirectUris": [
+        "http://localhost:5173/api/v1/auth/saml/acs",
+        "http://localhost:5174/api/v1/auth/saml/acs",
+        "http://localhost:8000/api/v1/auth/saml/acs",
+        "http://localhost:8001/api/v1/auth/saml/acs"
+      ],
+      "attributes": {
+        "saml.assertion.signature": "true",
+        "saml.server.signature": "true",
+        "saml.client.signature": "false",
+        "saml.authnstatement": "true",
+        "saml.force.post.binding": "true",
+        "saml.encrypt": "false",
+        "saml_signature_algorithm": "RSA_SHA256",
+        "saml_name_id_format": "persistent",
+        "saml.force.name.id.format": "true"
+      },
+      "protocolMappers": [
+        {
+          "name": "email",
+          "protocol": "saml",
+          "protocolMapper": "saml-user-property-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "email",
+            "attribute.name": "email",
+            "attribute.nameformat": "Basic",
+            "friendly.name": "email"
+          }
+        },
+        {
+          "name": "givenName",
+          "protocol": "saml",
+          "protocolMapper": "saml-user-property-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "firstName",
+            "attribute.name": "givenName",
+            "attribute.nameformat": "Basic"
+          }
+        },
+        {
+          "name": "surname",
+          "protocol": "saml",
+          "protocolMapper": "saml-user-property-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "lastName",
+            "attribute.name": "surname",
+            "attribute.nameformat": "Basic"
+          }
+        },
+        {
+          "name": "groups",
+          "protocol": "saml",
+          "protocolMapper": "saml-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "attribute.name": "groups",
+            "attribute.nameformat": "Basic",
+            "full.path": "false",
+            "single": "false"
+          }
+        }
+      ]
     }
   ],
   "users": [
@@ -95,6 +167,24 @@
       ],
       "groups": [
         "platform-admins"
+      ]
+    },
+    {
+      "username": "erin",
+      "enabled": true,
+      "email": "erin.saml@example.com",
+      "emailVerified": true,
+      "firstName": "Erin",
+      "lastName": "Saml",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "erin-dev-password",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "annotators"
       ]
     }
   ]

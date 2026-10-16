@@ -59,9 +59,12 @@ FROM python:${PYTHON_VERSION} AS runtime
 # supporting them means installing libvips + libopenslide here and dropping
 # the `binary` extra. ffmpeg (video decoding) is not needed yet: the browser
 # plays video, the worker never decodes it.
+# xmlsec1 checks the XML signatures of SAML sign-ins (pysaml2, AUTH-1); it
+# runs as a separate process, so no native Python binding is built.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     libpq5 \
+    xmlsec1 \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 1000 app \
     && useradd --uid 1000 --gid app --shell /usr/sbin/nologin --no-create-home app

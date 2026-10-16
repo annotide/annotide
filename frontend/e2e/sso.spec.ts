@@ -6,65 +6,13 @@
  * See frontend/e2e/README.md. Skipped otherwise, so `make e2e` is unchanged.
  */
 import type { APIRequestContext, Browser, Page } from '@playwright/test'
+import { KEYCLOAK, KeycloakAdmin } from './keycloak'
 import { DEMO_PROJECT_NAME, expect, test } from './support'
-
-const KEYCLOAK = process.env.E2E_KEYCLOAK_URL ?? 'http://localhost:8180'
-const REALM = 'annotation'
 
 const ALICE = { username: 'alice', password: 'alice-dev-password', email: 'alice.sso@example.com' }
 const CAROL = { username: 'carol', password: 'carol-dev-password', email: 'carol.sso@example.com' }
 
 test.skip(!process.env.E2E_SSO, 'set E2E_SSO=1 with the docker-compose.sso.yml stack running')
-
-/** Keycloak admin REST, authenticated as the bootstrap admin of the dev container. */
-class KeycloakAdmin {
-  private constructor(
-    private readonly http: APIRequestContext,
-    private readonly token: string,
-  ) {}
-
-  static async connect(http: APIRequestContext): Promise<KeycloakAdmin> {
-    const response = await http.post(`${KEYCLOAK}/realms/master/protocol/openid-connect/token`, {
-      form: { grant_type: 'password', client_id: 'admin-cli', username: 'admin', password: 'admin' },
-    })
-    expect(response.ok(), `Keycloak admin login: ${response.status()}`).toBeTruthy()
-    const { access_token } = (await response.json()) as { access_token: string }
-    return new KeycloakAdmin(http, access_token)
-  }
-
-  private url(path: string): string {
-    return `${KEYCLOAK}/admin/realms/${REALM}${path}`
-  }
-
-  private get headers(): Record<string, string> {
-    return { Authorization: `Bearer ${this.token}` }
-  }
-
-  private async userId(username: string): Promise<string> {
-    const response = await this.http.get(this.url('/users'), {
-      headers: this.headers,
-      params: { username, exact: 'true' },
-    })
-    const [user] = (await response.json()) as Array<{ id: string }>
-    if (!user) throw new Error(`Keycloak user ${username} not found — realm not imported?`)
-    return user.id
-  }
-
-  /** Make `groups` exactly the user's group memberships. */
-  async setGroups(username: string, groups: string[]): Promise<void> {
-    const id = await this.userId(username)
-    const all = (await (
-      await this.http.get(this.url('/groups'), { headers: this.headers })
-    ).json()) as Array<{ id: string; name: string }>
-    for (const group of all) {
-      const path = this.url(`/users/${id}/groups/${group.id}`)
-      const response = groups.includes(group.name)
-        ? await this.http.put(path, { headers: this.headers })
-        : await this.http.delete(path, { headers: this.headers })
-      expect(response.status(), `${group.name} for ${username}`).toBe(204)
-    }
-  }
-}
 
 /** Sign in through the app's SSO button and Keycloak's own login form, in a fresh context. */
 async function signInWithKeycloak(
@@ -75,7 +23,8 @@ async function signInWithKeycloak(
   const context = await browser.newContext({ baseURL, storageState: { cookies: [], origins: [] } })
   const page = await context.newPage()
   await page.goto('/login')
-  await page.getByRole('link', { name: 'Sign in with Keycloak' }).click()
+  // Exact: the SSO override also offers "Keycloak SAML" (sso-saml.spec.ts).
+  await page.getByRole('link', { name: 'Sign in with Keycloak', exact: true }).click()
 
   await page.waitForURL(`${KEYCLOAK}/**`)
   await page.locator('#username').fill(user.username)
@@ -100,6 +49,9 @@ async function membership(
 }
 
 test.describe('SSO group sync with Keycloak (AUTH-3)', () => {
+  // One Keycloak realm: tests that move users between groups must not overlap.
+  test.describe.configure({ mode: 'serial' })
+
   let projectId: string
   let keycloak: KeycloakAdmin
 
@@ -146,7 +98,7 @@ test.describe('SSO group sync with Keycloak (AUTH-3)', () => {
       expect.objectContaining({ role: 'annotator', source: 'idp' }),
     )
     // Not an admin: the superuser-only nav stays hidden.
-    await expect(first.getByRole('button', { name: 'Admin' })).toHaveCount(0)
+    await expect(first.getByRole('button', { name: 'Admin', exact: true })).toHaveCount(0)
     await first.context().close()
 
     // Moved to another group at the provider: the next sign-in follows it.
@@ -166,7 +118,7 @@ test.describe('SSO group sync with Keycloak (AUTH-3)', () => {
 
   test('the admin group makes a superuser', async ({ browser, baseURL }) => {
     const page = await signInWithKeycloak(browser, baseURL, CAROL)
-    await page.getByRole('button', { name: 'Admin' }).click()
+    await page.getByRole('button', { name: 'Admin', exact: true }).click()
     await expect(page.getByRole('link', { name: 'Users' })).toBeVisible()
     await page.context().close()
   })

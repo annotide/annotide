@@ -19,6 +19,18 @@
 {{- if $public }}{{ $_ := set $config "APP_OIDC_REDIRECT_URI" (printf "%s/api/v1/auth/oidc/callback" $public) }}{{ end -}}
 {{- end -}}
 {{- end -}}
+{{- with .Values.saml -}}
+{{- if .idpMetadataUrl -}}
+{{- $_ := set $config "APP_SAML_IDP_METADATA_URL" .idpMetadataUrl -}}
+{{- $_ := set $config "APP_SAML_ACS_URL" (printf "%s/api/v1/auth/saml/acs" (required "publicUrl (or an ingress host) is required with saml.idpMetadataUrl" $public)) -}}
+{{- $_ := set $config "APP_SAML_DISPLAY_NAME" .displayName -}}
+{{- $_ := set $config "APP_SAML_GROUPS_ATTRIBUTE" .groupsAttribute -}}
+{{- if .idpEntityId }}{{ $_ := set $config "APP_SAML_IDP_ENTITY_ID" .idpEntityId }}{{ end -}}
+{{- if .organizationSlug }}{{ $_ := set $config "APP_SAML_ORGANIZATION_SLUG" .organizationSlug }}{{ end -}}
+{{- if .adminGroups }}{{ $_ := set $config "APP_SAML_ADMIN_GROUPS" .adminGroups }}{{ end -}}
+{{- if .trustEmail }}{{ $_ := set $config "APP_SAML_TRUST_EMAIL" "true" }}{{ end -}}
+{{- end -}}
+{{- end -}}
 {{- with .Values.smtp -}}
 {{- if .host -}}
 {{- $_ := set $config "APP_SMTP_HOST" .host -}}

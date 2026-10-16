@@ -62,6 +62,27 @@ describe('LoginPage', () => {
     expect(screen.getByLabelText('Password')).toBeInTheDocument()
   })
 
+  it('offers SAML beside OIDC, each with its own login path', async () => {
+    vi.mocked(api.authProviders).mockResolvedValue({
+      ...withSso,
+      saml: { display_name: 'Acme SAML', login_path: '/auth/saml/login' },
+    })
+    renderPage()
+    const saml = await screen.findByRole('link', { name: 'Sign in with Acme SAML' })
+    expect(saml).toHaveAttribute('href', '/api/v1/auth/saml/login')
+    expect(screen.getByRole('link', { name: 'Sign in with Acme SSO' })).toBeInTheDocument()
+  })
+
+  it('offers SAML alone when only SAML is configured', async () => {
+    vi.mocked(api.authProviders).mockResolvedValue({
+      local: true,
+      oidc: null,
+      saml: { display_name: 'Acme SAML', login_path: '/auth/saml/login' },
+    })
+    renderPage()
+    expect(await screen.findAllByRole('link', { name: /Sign in with/ })).toHaveLength(1)
+  })
+
   it('carries the requested destination into the SSO link', async () => {
     vi.mocked(api.authProviders).mockResolvedValue(withSso)
     const queryClient = new QueryClient({
@@ -88,6 +109,8 @@ describe('LoginPage', () => {
     expect(ssoErrorMessage('something_new')).toMatch(/Single sign-on failed/)
     expect(ssoErrorMessage('inactive')).toMatch(/deactivated/)
     expect(ssoErrorMessage('seat_limit')).toMatch(/licensed seat/)
+    expect(ssoErrorMessage('invalid_response')).toMatch(/could not be verified/)
+    expect(ssoErrorMessage('unsupported_name_id')).toMatch(/persistent or e-mail NameID/)
   })
 
   it('asks for an authentication code when the account has MFA on', async () => {

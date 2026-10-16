@@ -42,6 +42,7 @@ from app.services.licensing.state import (
 from app.services.oidc import OidcClient, get_oidc_client
 from app.services.pagination import clamp_limit
 from app.services.queue import JobQueue, get_job_queue
+from app.services.saml import SamlClient, get_saml_client
 
 # ``auto_error=False`` so a missing header produces our own problem-details
 # response rather than FastAPI's default body.
@@ -93,6 +94,7 @@ def get_job_queue_factory(request: Request) -> Callable[[], Awaitable[JobQueue]]
 QueueFactoryDep = Annotated[Callable[[], Awaitable[JobQueue]], Depends(get_job_queue_factory)]
 #: The identity provider client (AUTH-1). Tests override it with a mock transport.
 OidcClientDep = Annotated[OidcClient, Depends(get_oidc_client)]
+SamlClientDep = Annotated[SamlClient, Depends(get_saml_client)]
 
 
 @dataclass(frozen=True, slots=True)

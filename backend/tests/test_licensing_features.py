@@ -317,6 +317,8 @@ def routes(maker: async_sessionmaker[AsyncSession]) -> Iterator[FastAPI]:
         oidc_issuer="https://idp.example",
         oidc_client_id="annotide",
         oidc_redirect_uri="http://localhost:8000/api/v1/auth/oidc/callback",
+        saml_idp_metadata_file="/nonexistent/idp.xml",
+        saml_acs_url="http://localhost:8000/api/v1/auth/saml/acs",
     )
     application = create_app(settings)
 
@@ -366,8 +368,16 @@ class TestRoutes:
         assert login.headers["location"].endswith("/login?error=license_feature")
         callback = client.get("/api/v1/auth/oidc/callback?code=x&state=y")
         assert callback.headers["location"].endswith("/login?error=license_feature")
+        assert client.get("/api/v1/auth/providers").json()["saml"] is None
+        for response in (
+            client.get("/api/v1/auth/saml/login"),
+            client.post("/api/v1/auth/saml/acs", data={"SAMLResponse": "x"}),
+        ):
+            assert response.headers["location"].endswith("/login?error=license_feature")
         unlock(routes)
-        assert client.get("/api/v1/auth/providers").json()["oidc"] is not None
+        providers = client.get("/api/v1/auth/providers").json()
+        assert providers["oidc"] is not None
+        assert providers["saml"] is not None
 
     async def test_audit_reads_30_days_without_audit_history(
         self, routes: FastAPI, maker: async_sessionmaker[AsyncSession]

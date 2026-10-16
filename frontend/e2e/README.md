@@ -37,6 +37,7 @@ source. Set `E2E_BASE_URL` to target a built deployment instead; `E2E_EMAIL`
 | `workflow.spec.ts` | Task queue and review (WF-1…4): claim + lock, release, submit → review task, reject → back to the annotator, re-submit, approve |
 | `pdf.spec.ts` | Uploads a generated two-page PDF, pdf.js renders it, a box on page 2 is saved in page points with the words under it |
 | `sso.spec.ts` | Opt-in (`E2E_SSO=1`): SSO through a real Keycloak; IdP groups grant, change and revoke a project role; the admin group makes a superuser (AUTH-1, AUTH-3). See "Single sign-on" below |
+| `sso-saml.spec.ts` | Opt-in (`E2E_SSO=1`): SAML 2.0 sign-in through Keycloak's SAML client, signed assertion checked by xmlsec1; IdP groups set the project role and the admin group makes a superuser (AUTH-1, AUTH-3) |
 | `upload.spec.ts` | Files and a whole folder picked in the Upload panel → PUT to Azurite on signed URLs → the scan the panel queues → items with the folder's relative paths (§12) |
 | `import-export.spec.ts` | COCO import: dry run previews, the real run writes a submitted `car` box; a COCO export downloaded on its signed URL holds it; a failed import is re-run from Retry (EXP-5, EXP-6, ARC-4) |
 | `admin.spec.ts` | Connectors (demo check OK; create → storage events on, an anonymous delivery accepted, off → 404 → edit → delete), models (check OK, versions), org webhooks (one-time secret, pause/resume, delete), user directory search, licence page |
@@ -63,8 +64,9 @@ trace and screenshot land in `frontend/test-results/`.
 
 ## Single sign-on (Keycloak)
 
-`sso.spec.ts` needs the dev Keycloak and a backend configured for it; it is
-skipped unless `E2E_SSO=1`:
+`sso.spec.ts` (OIDC) and `sso-saml.spec.ts` (SAML 2.0) need the dev
+Keycloak and a backend configured for it; they are skipped unless
+`E2E_SSO=1`:
 
 ```sh
 docker compose -f docker-compose.yml -f docker-compose.sso.yml up -d --wait keycloak backend worker
@@ -78,4 +80,6 @@ Playwright dev server (:5174), so the rest of the suite is best run on the
 plain stack. The realm (`infra/keycloak/annotation-realm.json`) has users
 `alice` (group `annotators`) and `carol` (`platform-admins`); the spec moves
 alice between groups through Keycloak's admin API and puts her back after
-each test. Keycloak's console is http://localhost:8180 (admin / admin).
+each test. `sso-saml.spec.ts` signs in as `erin` through the realm's SAML
+client `annotide-saml`; one account links to one IdP identity, so erin is
+SAML-only. Keycloak's console is http://localhost:8180 (admin / admin).

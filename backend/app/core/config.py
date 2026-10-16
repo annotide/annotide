@@ -201,6 +201,36 @@ class Settings(BaseSettings):
     #: Comma-separated IdP groups whose members are superusers. Unset leaves
     #: ``is_superuser`` to the application (AUTH-3).
     oidc_admin_groups: str | None = None
+
+    # --- SAML 2.0 single sign-on (AUTH-1) ---------------------------------
+    #: The identity provider's metadata, from a URL or a file. Setting either
+    #: turns SAML on; the URL is re-read every hour.
+    saml_idp_metadata_url: str | None = None
+    saml_idp_metadata_file: str | None = None
+    #: Which IdP in the metadata, when it describes several (a federation).
+    saml_idp_entity_id: str | None = None
+    #: Assertion Consumer Service the IdP posts to, registered with it:
+    #: ``https://<api-host>/api/v1/auth/saml/acs``.
+    saml_acs_url: str | None = None
+    #: This service provider's entity id. Unset: the metadata URL next to the
+    #: ACS, ``https://<api-host>/api/v1/auth/saml/metadata``.
+    saml_sp_entity_id: str | None = None
+    #: Label on the sign-in button.
+    saml_display_name: str = "Single sign-on (SAML)"
+    #: Like the ``APP_OIDC_*`` settings of the same names, for SAML sign-ins.
+    saml_organization_slug: str | None = None
+    saml_auto_provision: bool = True
+    #: SAML has no ``email_verified``: link a first SAML sign-in to an
+    #: existing account by e-mail only when the IdP's addresses come from a
+    #: directory users cannot edit (Entra ID, Okta, Google Workspace do).
+    saml_trust_email: bool = False
+    #: Attribute names, matched exactly or as the last segment of a URI name
+    #: (``groups`` matches ``http://schemas.microsoft.com/…/claims/groups``).
+    #: Empty ``saml_groups_attribute`` turns group sync off.
+    saml_email_attribute: str = "email,mail,emailaddress"
+    saml_name_attribute: str = "displayname,name"
+    saml_groups_attribute: str = "groups"
+    saml_admin_groups: str | None = None
     #: Where the browser is sent after SSO completes (and on SSO errors).
     frontend_url: str = "http://localhost:5173"
 
@@ -231,6 +261,13 @@ class Settings(BaseSettings):
         "oidc_redirect_uri",
         "oidc_organization_slug",
         "oidc_admin_groups",
+        "saml_idp_metadata_url",
+        "saml_idp_metadata_file",
+        "saml_idp_entity_id",
+        "saml_acs_url",
+        "saml_sp_entity_id",
+        "saml_organization_slug",
+        "saml_admin_groups",
         "secret_file_root",
         "azure_key_vault_name",
         "managed_identity_client_id",
@@ -320,6 +357,35 @@ class Settings(BaseSettings):
     def oidc_enabled(self) -> bool:
         """True when an identity provider is configured (AUTH-1)."""
         return bool(self.oidc_issuer)
+
+    @model_validator(mode="after")
+    def _require_complete_saml_config(self) -> Self:
+        """Metadata without an ACS URL cannot complete a login; two sources are ambiguous."""
+        if self.saml_idp_metadata_url and self.saml_idp_metadata_file:
+            raise ValueError(
+                "Set one of APP_SAML_IDP_METADATA_URL and APP_SAML_IDP_METADATA_FILE, not both"
+            )
+        if self.saml_enabled and not self.saml_acs_url:
+            raise ValueError("APP_SAML_ACS_URL is required with APP_SAML_IDP_METADATA_*")
+        # The metadata carries the IdP's signing key and is itself unsigned.
+        url = self.saml_idp_metadata_url or ""
+        if self.env == "production" and url and not url.startswith("https://"):
+            raise ValueError("APP_SAML_IDP_METADATA_URL must be https when APP_ENV=production")
+        return self
+
+    @property
+    def saml_enabled(self) -> bool:
+        """True when a SAML identity provider is configured (AUTH-1)."""
+        return bool(self.saml_idp_metadata_url or self.saml_idp_metadata_file)
+
+    @property
+    def saml_entity_id(self) -> str:
+        """This service provider's entity id: set, or derived from the ACS URL."""
+        if self.saml_sp_entity_id:
+            return self.saml_sp_entity_id
+        acs = (self.saml_acs_url or "").rstrip("/")
+        base = acs[: -len("/acs")] if acs.endswith("/acs") else acs
+        return f"{base}/metadata"
 
 
 @lru_cache

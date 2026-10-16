@@ -68,6 +68,9 @@ jobs:
           cache: pip
           cache-dependency-path: backend/pyproject.toml
 
+      - name: Install xmlsec1 (SAML signature checks, AUTH-1)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xmlsec1
+
       - name: Install backend (dev + otel extras)
         working-directory: backend
         run: pip install -e ".[dev,otel]"

@@ -33,6 +33,8 @@ class AuthProviders(BaseSchema):
 
     local: bool = True
     oidc: OidcProviderInfo | None = None
+    #: SAML 2.0 (AUTH-1); same shape, its own login path.
+    saml: OidcProviderInfo | None = None
 
 
 class TokenResponse(BaseSchema):
