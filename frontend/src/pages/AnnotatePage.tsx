@@ -85,6 +85,36 @@ function errorMessage(error: unknown, fallback: string): string {
   return error instanceof ApiError ? (error.detail ?? error.title) : fallback
 }
 
+/** At most this many submit-time problems are listed; the rest are counted. */
+const MAX_VIOLATIONS_SHOWN = 5
+
+/** The server's list of what failed the label schema on submit (QA-6), if it sent one. */
+function violationsOf(error: unknown): string[] {
+  if (!(error instanceof ApiError)) return []
+  const list = error.problem.violations
+  return Array.isArray(list) ? list.filter((v): v is string => typeof v === 'string') : []
+}
+
+/** Why a save or submit failed, with the schema problems when the server listed them. */
+function SaveError({ error }: { error: unknown }) {
+  const { t } = useTranslation('annotator')
+  const violations = violationsOf(error)
+  const hidden = violations.length - MAX_VIOLATIONS_SHOWN
+  return (
+    <div className="mr-auto text-sm text-danger" role="alert">
+      <p>{errorMessage(error, t('page.saveAnnotationError'))}</p>
+      {violations.length > 0 && (
+        <ul className="mt-1 list-disc pl-5 text-xs">
+          {violations.slice(0, MAX_VIOLATIONS_SHOWN).map((violation) => (
+            <li key={violation}>{violation}</li>
+          ))}
+          {hidden > 0 && <li>{t('page.moreViolations', { count: hidden })}</li>}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 /** `item.meta.tiles` (IMG-1), narrowed from the untyped JSONB bag. */
 function itemTiles(meta: Record<string, unknown>): ItemTiles | null {
   const tiles = meta.tiles
@@ -1077,9 +1107,7 @@ export function AnnotatePage(): JSX.Element {
           </span>
         ) : (
           createAnnotation.isError && (
-            <span className="mr-auto text-sm text-danger">
-              {errorMessage(createAnnotation.error, t('page.saveAnnotationError'))}
-            </span>
+            <SaveError error={createAnnotation.error} />
           )
         )}
         <Button variant="secondary" onClick={handleNext}>

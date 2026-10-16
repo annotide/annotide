@@ -183,6 +183,28 @@ test('the smart polygon tool turns a dragged box into a model-drawn polygon (ML-
   await expectShapeCount(page, initial)
 })
 
+test('the smart polygon refuses a class that takes boxes only, before asking the model', async ({
+  page,
+  demo,
+}) => {
+  // Demo schema: `sign` (hotkey 2) allows bbox only, so a polygon in it
+  // would fail on submit (QA-6). The canvas says so instead.
+  const canvas = await openItem(page, demo.id, demo.firstItemId)
+  const initial = await shapeCount(page)
+  await page.keyboard.press('2')
+  await page.getByRole('button', { name: /^Smart polygon/ }).click()
+
+  await dragBox(page, canvas, [0.3, 0.3], [0.6, 0.6])
+  await expect(page.getByRole('alert')).toContainText('does not take polygon shapes')
+  await expectShapeCount(page, initial)
+
+  // Back to a class that takes polygons: the message goes, drawing works.
+  await page.keyboard.press('1')
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  await dragBox(page, canvas, [0.3, 0.3], [0.6, 0.6])
+  await expectShapeCount(page, initial + 1)
+})
+
 test('saving a draft persists an annotation version with the drawn box', async ({
   page,
   api,

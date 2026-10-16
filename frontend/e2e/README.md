@@ -33,7 +33,7 @@ source. Set `E2E_BASE_URL` to target a built deployment instead; `E2E_EMAIL`
 | `auth.setup.ts` | Signs in once, saves storage state for the rest |
 | `auth.spec.ts` | Route guard, wrong password, login/logout, deep-link restore |
 | `projects.spec.ts` | Demo project list → item grid; create → settings → delete; dashboard |
-| `annotate.spec.ts` | Item + media load, box drawn on the canvas, undo/redo, draft saved |
+| `annotate.spec.ts` | Item + media load, box drawn on the canvas, undo/redo, draft saved; smart polygon, and its refusal in a class that takes boxes only |
 | `workflow.spec.ts` | Task queue and review (WF-1…4): claim + lock, release, submit → review task, reject → back to the annotator, re-submit, approve |
 | `pdf.spec.ts` | Uploads a generated two-page PDF, pdf.js renders it, a box on page 2 is saved in page points with the words under it |
 | `sso.spec.ts` | Opt-in (`E2E_SSO=1`): SSO through a real Keycloak; IdP groups grant, change and revoke a project role; the admin group makes a superuser (AUTH-1, AUTH-3). See "Single sign-on" below |

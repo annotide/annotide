@@ -282,6 +282,34 @@ describe('AnnotatePage', () => {
     await waitFor(() => expect(screen.getByText('Queue is empty')).toBeInTheDocument())
   })
 
+  it('lists the schema problems the server found on submit (QA-6)', async () => {
+    vi.mocked(api.nextTask).mockResolvedValueOnce(makeTask())
+    const violations = Array.from(
+      { length: 7 },
+      (_, i) => `shape s${i}: tool 'polygon' is not allowed for class 'sign'`,
+    )
+    vi.mocked(api.createAnnotation).mockRejectedValueOnce(
+      new ApiError({
+        type: 'urn:annotation:error:validation-failed',
+        title: 'Annotation failed validation',
+        status: 422,
+        detail: 'The annotation has 7 validation problem(s).',
+        violations,
+      }),
+    )
+    const user = userEvent.setup()
+
+    renderAt('/projects/p1/annotate')
+    await waitFor(() => expect(screen.getByTestId('annotator')).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Submit' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('The annotation has 7 validation problem(s).')
+    expect(alert).toHaveTextContent("shape s0: tool 'polygon' is not allowed for class 'sign'")
+    expect(alert).not.toHaveTextContent('shape s5')
+    expect(alert).toHaveTextContent('and 2 more problems')
+  })
+
   it('stops a submit that misses a required attribute and says which (QA-6)', async () => {
     vi.mocked(api.listSchemas).mockResolvedValue([
       {

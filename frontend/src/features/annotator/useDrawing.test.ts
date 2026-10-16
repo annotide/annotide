@@ -18,7 +18,8 @@ const classes: LabelClass[] = [
     display_name: 'Car',
     color: '#e11d48',
     hotkey: '1',
-    tools: ['bbox', 'polygon', 'point'],
+    // Every drawing tool these tests use: a class that lacks one refuses it.
+    tools: ['bbox', 'rbox', 'polygon', 'polyline', 'point', 'mask'],
     attributes: [],
   },
   {
@@ -954,5 +955,141 @@ describe('keypoint skeletons', () => {
     act(() => result.current.addKeypoint([10, 20], false))
     expect(result.current.draft).toBeNull()
     expect(onChange).not.toHaveBeenCalled()
+  })
+})
+
+describe('class tools: a class only takes the shapes its schema allows (QA-6)', () => {
+  const signAndCar: LabelClass[] = [
+    {
+      name: 'sign',
+      display_name: 'Sign',
+      color: '#f59e0b',
+      hotkey: '1',
+      tools: ['bbox'],
+      attributes: [],
+    },
+    {
+      name: 'car',
+      display_name: 'Car',
+      color: '#e11d48',
+      hotkey: '2',
+      tools: ['bbox', 'polygon'],
+      attributes: [],
+    },
+  ]
+
+  function setupSigns(initial: AnnotationResult = emptyResult()) {
+    const onChange = vi.fn()
+    const { result } = renderHook(() =>
+      useDrawing({
+        value: initial,
+        onChange,
+        classes: signAndCar,
+        imageWidth: 1000,
+        imageHeight: 800,
+      }),
+    )
+    return { result, onChange }
+  }
+
+  it('refuses a smart polygon before the model is asked', () => {
+    const { result, onChange } = setupSigns()
+    act(() => {
+      result.current.setTool('smart')
+      result.current.beginSmartDrag([40, 30])
+    })
+    expect(result.current.draft).toBeNull()
+    expect(result.current.refusal).toEqual({ className: 'sign', shapeType: 'polygon' })
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('refuses a model polygon that arrives after the class changed', () => {
+    const { result, onChange } = setupSigns()
+    act(() => {
+      result.current.addPolygonShape([
+        [10, 10],
+        [50, 10],
+        [30, 40],
+      ])
+    })
+    expect(onChange).not.toHaveBeenCalled()
+    expect(result.current.refusal?.className).toBe('sign')
+  })
+
+  it('refuses a hand-drawn polygon at its first point, allows a box', () => {
+    const { result, onChange } = setupSigns()
+    act(() => {
+      result.current.setTool('polygon')
+      result.current.addPolygonPoint([10, 10])
+    })
+    expect(result.current.draft).toBeNull()
+    expect(result.current.refusal).toEqual({ className: 'sign', shapeType: 'polygon' })
+
+    act(() => {
+      result.current.setTool('bbox')
+    })
+    expect(result.current.refusal).toBeNull()
+    act(() => {
+      result.current.beginBBoxDrag([10, 10])
+      result.current.updateBBoxDrag([60, 50])
+    })
+    act(() => {
+      result.current.commitBBoxDrag()
+    })
+    expect(lastValue(onChange).shapes).toEqual([
+      expect.objectContaining({ type: 'bbox', class: 'sign' }),
+    ])
+  })
+
+  it('choosing a class that takes the shape clears the refusal and draws', () => {
+    const { result, onChange } = setupSigns()
+    act(() => {
+      result.current.setTool('polygon')
+      result.current.addPolygonPoint([10, 10])
+    })
+    act(() => {
+      result.current.setActiveClassName('car')
+    })
+    expect(result.current.refusal).toBeNull()
+    act(() => {
+      result.current.addPolygonShape([
+        [10, 10],
+        [50, 10],
+        [30, 40],
+      ])
+    })
+    expect(lastValue(onChange).shapes).toEqual([
+      expect.objectContaining({ type: 'polygon', class: 'car' }),
+    ])
+  })
+
+  it('a class hotkey does not move a selected polygon into a box-only class', () => {
+    const polygon: AnnotationResult = {
+      ...emptyResult(),
+      shapes: [
+        {
+          id: 'p1',
+          type: 'polygon',
+          class: 'car',
+          attributes: {},
+          confidence: null,
+          points: [
+            [10, 10],
+            [50, 10],
+            [30, 40],
+          ],
+        },
+      ],
+    }
+    const { result, onChange } = setupSigns(polygon)
+    act(() => {
+      result.current.select('p1')
+    })
+    act(() => {
+      result.current.applyHotkeyClass('1')
+    })
+    expect(onChange).not.toHaveBeenCalled()
+    expect(result.current.activeClassName).toBe('sign')
+    expect(result.current.refusal).toEqual({ className: 'sign', shapeType: 'polygon' })
   })
 })

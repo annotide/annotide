@@ -29,9 +29,20 @@ import type {
   Point2D,
   Shape,
   ShapeAttributes,
+  ShapeTool,
   SmartPrompt,
   Tool,
 } from './types'
+
+/**
+ * A shape the label schema forbids: the class's `tools` lack its type, so the
+ * server would refuse the annotation on submit (QA-6). Drawing stops before
+ * that and the annotator says why.
+ */
+export interface ToolRefusal {
+  className: string
+  shapeType: ShapeTool
+}
 
 // ---------------------------------------------------------------------------
 // Attribute defaults (TOOL-2). A new shape starts with every attribute that
@@ -156,6 +167,9 @@ export interface UseDrawingResult {
   select: (id: string | null) => void
   activeClassName: string | null
   setActiveClassName: (name: string | null) => void
+  /** Set when the last gesture would have made a shape its class does not
+   * take; cleared by the next allowed gesture or a class or tool change. */
+  refusal: ToolRefusal | null
   /** Look up a class by its hotkey; sets it active and, if a shape is
    * selected, re-classifies that shape too (UX-1). */
   applyHotkeyClass: (hotkey: string) => void
@@ -246,7 +260,14 @@ export function useDrawing(options: UseDrawingOptions): UseDrawingResult {
     setDraftState(next)
   }, [])
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [activeClassName, setActiveClassName] = useState<string | null>(classes[0]?.name ?? null)
+  const [activeClassName, setActiveClassNameState] = useState<string | null>(
+    classes[0]?.name ?? null,
+  )
+  const [refusal, setRefusal] = useState<ToolRefusal | null>(null)
+  const setActiveClassName = useCallback((name: string | null) => {
+    setActiveClassNameState(name)
+    setRefusal(null)
+  }, [])
 
   // Selection is mirrored into a ref for the same reason history is: an action
   // dispatched in the same tick as select() would otherwise close over the
@@ -269,8 +290,23 @@ export function useDrawing(options: UseDrawingOptions): UseDrawingResult {
     (next: Tool) => {
       setDraft(null)
       setToolState(next)
+      setRefusal(null)
     },
     [setDraft],
+  )
+
+  /** Whether the active class takes a new shape of `type`; records why not. */
+  const allowNew = useCallback(
+    (type: ShapeTool): boolean => {
+      const cls = classes.find((c) => c.name === activeClassName) ?? classes[0]
+      if (!cls || cls.tools.includes(type)) {
+        setRefusal(null)
+        return true
+      }
+      setRefusal({ className: cls.name, shapeType: type })
+      return false
+    },
+    [activeClassName, classes],
   )
 
   const select = useCallback(
@@ -288,6 +324,12 @@ export function useDrawing(options: UseDrawingOptions): UseDrawingResult {
       const target = selectedIdRef.current
       if (readOnly || !target) return
       const current = historyRef.current.present
+      const shape = current.shapes.find((s) => s.id === target)
+      if (shape && !cls.tools.includes(shape.type as ShapeTool)) {
+        // The class stays active for new shapes; the selected one keeps its own.
+        setRefusal({ className: cls.name, shapeType: shape.type as ShapeTool })
+        return
+      }
       const shapes = current.shapes.map((s) =>
         s.id === target
           ? { ...s, class: cls.name, attributes: reconcileAttributes(s.attributes, cls) }
@@ -295,7 +337,7 @@ export function useDrawing(options: UseDrawingOptions): UseDrawingResult {
       )
       if (shapes !== current.shapes) commit({ ...current, shapes })
     },
-    [classes, commit, readOnly],
+    [classes, commit, readOnly, setActiveClassName],
   )
 
   // Step through history from the ref, outside any state updater: calling the
@@ -341,11 +383,11 @@ export function useDrawing(options: UseDrawingOptions): UseDrawingResult {
 
   const beginBBoxDrag = useCallback(
     (point: Point2D) => {
-      if (readOnly) return
+      if (readOnly || !allowNew('bbox')) return
       const clamped = clampPointToImage(point, imageWidth, imageHeight)
       setDraft({ tool: 'bbox', start: clamped, current: clamped })
     },
-    [imageHeight, imageWidth, readOnly, setDraft],
+    [allowNew, imageHeight, imageWidth, readOnly, setDraft],
   )
 
   const updateBBoxDrag = useCallback(
@@ -376,10 +418,11 @@ export function useDrawing(options: UseDrawingOptions): UseDrawingResult {
       if (readOnly) return
       const clamped = clampPointToImage(point, imageWidth, imageHeight)
       const d = draftRef.current
-      if (!d || d.tool !== 'polygon') setDraft({ tool: 'polygon', points: [clamped] })
-      else setDraft({ ...d, points: [...d.points, clamped] })
+      if (!d || d.tool !== 'polygon') {
+        if (allowNew('polygon')) setDraft({ tool: 'polygon', points: [clamped] })
+      } else setDraft({ ...d, points: [...d.points, clamped] })
     },
-    [imageHeight, imageWidth, readOnly, setDraft],
+    [allowNew, imageHeight, imageWidth, readOnly, setDraft],
   )
 
   const closePolygon = useCallback(() => {
@@ -401,10 +444,11 @@ export function useDrawing(options: UseDrawingOptions): UseDrawingResult {
       if (readOnly) return
       const clamped = clampPointToImage(point, imageWidth, imageHeight)
       const d = draftRef.current
-      if (!d || d.tool !== 'polyline') setDraft({ tool: 'polyline', points: [clamped] })
-      else setDraft({ ...d, points: [...d.points, clamped] })
+      if (!d || d.tool !== 'polyline') {
+        if (allowNew('polyline')) setDraft({ tool: 'polyline', points: [clamped] })
+      } else setDraft({ ...d, points: [...d.points, clamped] })
     },
-    [imageHeight, imageWidth, readOnly, setDraft],
+    [allowNew, imageHeight, imageWidth, readOnly, setDraft],
   )
 
   const finishPolyline = useCallback(() => {
@@ -427,7 +471,7 @@ export function useDrawing(options: UseDrawingOptions): UseDrawingResult {
       const clamped = clampPointToImage(point, imageWidth, imageHeight)
       const d = draftRef.current
       if (!d || d.tool !== 'rbox') {
-        setDraft({ tool: 'rbox', points: [clamped], current: clamped })
+        if (allowNew('rbox')) setDraft({ tool: 'rbox', points: [clamped], current: clamped })
         return
       }
       if (d.points.length === 1) {
@@ -447,7 +491,7 @@ export function useDrawing(options: UseDrawingOptions): UseDrawingResult {
       commit({ ...current, shapes: [...current.shapes, shape] })
       setSelection(shape.id)
     },
-    [commit, imageHeight, imageWidth, newShapeBase, readOnly, setDraft, setSelection],
+    [allowNew, commit, imageHeight, imageWidth, newShapeBase, readOnly, setDraft, setSelection],
   )
 
   const updateRBoxPreview = useCallback(
@@ -480,14 +524,14 @@ export function useDrawing(options: UseDrawingOptions): UseDrawingResult {
 
   const addPointShape = useCallback(
     (point: Point2D) => {
-      if (readOnly) return
+      if (readOnly || !allowNew('point')) return
       const clamped = clampPointToImage(point, imageWidth, imageHeight)
       const current = historyRef.current.present
       const shape: Shape = { ...newShapeBase(), type: 'point', point: clamped }
       commit({ ...current, shapes: [...current.shapes, shape] })
       setSelection(shape.id)
     },
-    [commit, imageHeight, imageWidth, newShapeBase, readOnly, setSelection],
+    [allowNew, commit, imageHeight, imageWidth, newShapeBase, readOnly, setSelection],
   )
 
   // --- brush / eraser (masks) -------------------------------------------
@@ -534,12 +578,12 @@ export function useDrawing(options: UseDrawingOptions): UseDrawingResult {
         commit({ ...current, shapes })
         return
       }
-      if (isEmptyRle(rle)) return
+      if (isEmptyRle(rle) || !allowNew('mask')) return
       const shape: Shape = { ...newShapeBase(), type: 'mask', rle }
       commit({ ...current, shapes: [...current.shapes, shape] })
       setSelection(shape.id)
     },
-    [commit, imageHeight, imageWidth, newShapeBase, readOnly, setSelection],
+    [allowNew, commit, imageHeight, imageWidth, newShapeBase, readOnly, setSelection],
   )
 
   const commitStroke = useCallback(() => {
@@ -617,11 +661,13 @@ export function useDrawing(options: UseDrawingOptions): UseDrawingResult {
 
   const beginSmartDrag = useCallback(
     (point: Point2D) => {
-      if (readOnly) return
+      // Checked before the model is asked: a SAM2 round trip for a shape the
+      // class cannot hold would only end in a refusal on submit.
+      if (readOnly || !allowNew('polygon')) return
       const clamped = clampPointToImage(point, imageWidth, imageHeight)
       setDraft({ tool: 'smart', start: clamped, current: clamped })
     },
-    [imageHeight, imageWidth, readOnly, setDraft],
+    [allowNew, imageHeight, imageWidth, readOnly, setDraft],
   )
 
   const updateSmartDrag = useCallback(
@@ -648,13 +694,14 @@ export function useDrawing(options: UseDrawingOptions): UseDrawingResult {
       const clamped = trimTrailingDuplicates(
         points.map((p) => clampPointToImage(p, imageWidth, imageHeight)),
       )
-      if (clamped.length < MIN_POLYGON_POINTS) return
+      // The class may have changed while the model was answering.
+      if (clamped.length < MIN_POLYGON_POINTS || !allowNew('polygon')) return
       const current = historyRef.current.present
       const shape: Shape = { ...newShapeBase(), type: 'polygon', points: clamped }
       commit({ ...current, shapes: [...current.shapes, shape] })
       setSelection(shape.id)
     },
-    [commit, imageHeight, imageWidth, newShapeBase, readOnly, setSelection],
+    [allowNew, commit, imageHeight, imageWidth, newShapeBase, readOnly, setSelection],
   )
 
   // --- select-tool editing -----------------------------------------------
@@ -678,6 +725,7 @@ export function useDrawing(options: UseDrawingOptions): UseDrawingResult {
     select,
     activeClassName,
     setActiveClassName,
+    refusal,
     applyHotkeyClass,
     canUndo: history.past.length > 0,
     canRedo: history.future.length > 0,
