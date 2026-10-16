@@ -10,6 +10,7 @@ On by default; failing or being switched off never changes behaviour. See
 
 from __future__ import annotations
 
+import hashlib
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, Final
 
@@ -51,14 +52,25 @@ def unavailable_reason(settings: Settings, licence: EffectiveLicense) -> str | N
     return None
 
 
+def key_digest(key: str) -> str:
+    """SHA-256 hex of the key as issued: proof the caller holds it, not just its id."""
+    return hashlib.sha256(key.strip().encode("utf-8")).hexdigest()
+
+
 def build_payload(
     settings: Settings, licence: EffectiveLicense, state: LicenseState | None, active_users: int
 ) -> dict[str, Any] | None:
-    """What the refresh sends; ``None`` without a verified key."""
-    if licence.license is None:
+    """What the refresh sends; ``None`` without a verified key.
+
+    ``key_digest`` lets the licence server tell the holder of a key from
+    someone who only learned its licence id (LIC-27): it hands out or binds a
+    key only for a digest of one it issued.
+    """
+    if licence.license is None or licence.key is None:
         return None
     return {
         "license_id": licence.license.license_id,
+        "key_digest": key_digest(licence.key),
         "install_id": settings.install_id,
         "host": settings.public_hostname or (state.last_host if state is not None else None),
         "active_users": active_users,

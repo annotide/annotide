@@ -6,6 +6,7 @@ and in-memory SQLite.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
@@ -246,6 +247,8 @@ async def test_refresh_stores_a_renewed_key_and_reports_the_sign_in_host(
     assert server.bodies("/v1/refresh") == [
         {
             "license_id": "lic-calls",
+            # Proof of holding the key, not just its id (LIC-27).
+            "key_digest": hashlib.sha256(current.encode()).hexdigest(),
             "install_id": "acme-prod",
             "host": "annotate.acme.com",
             "active_users": 1,

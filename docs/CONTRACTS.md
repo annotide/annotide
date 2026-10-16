@@ -2320,7 +2320,10 @@ except that a renewed key is stored.
 - **Refresh** — on unless `APP_LICENSE_REFRESH_ENABLED=false`, only while a
   verified key (valid or expired) is in force. Due when it has not succeeded
   in 24 h and no retry is waiting (below). `POST {url}/v1/refresh`
-  `{license_id, install_id, host, active_users, version}` — `host` is
+  `{license_id, key_digest, install_id, host, active_users, version}` —
+  `key_digest` is the SHA-256 hex of the key in force (trimmed), proof of
+  holding it: the licence server returns or binds a key only for a digest
+  of one it issued for that licence (LIC-27, LIC-29). `host` is
   `APP_PUBLIC_HOSTNAME`, else the last non-loopback host seen at sign-in
   (`license_state.last_host`), else `null`. The answer is `200 {key}` (`key`
   may be `null`: nothing newer), optionally with `revocations`, a revocation

@@ -267,7 +267,7 @@ install behaves.
 | - | ------------------------ | ------------------------- |
 | Who | Installs with a key | Any edition |
 | Default | **On**; the admin can turn it off and paste keys by hand | **On**; the admin can turn it off (LIC-9) |
-| Sends | licence id, install id, host, active user count, version | install id, version, edition, active user count, salted-hash organisation fingerprint |
+| Sends | licence id, a SHA-256 digest of the key, install id, host, active user count, version | install id, version, edition, active user count, salted-hash organisation fingerprint |
 | Receives | the renewed key, if one exists, and the revocation list | nothing |
 | Interval | daily, with retries | weekly |
 | Vendor learns | paid installs, copied keys, seat usage | Community clusters; install counts by version and edition, in aggregate |
@@ -300,9 +300,11 @@ A key used in one install must not simply work in a second one.
   overnight.
 - **Binding is automatic.** If the customer names a domain at checkout, the
   key carries it. Otherwise the first licence refresh binds the key to the
-  host it reports. A second install refreshing the same licence from a
-  different host gets no key for its host, and the vendor sees the copy.
-  Extra hosts (staging) are added on request.
+  host it reports. The refresh sends a digest of the key it holds, and the
+  licence service answers only for a key it issued, so knowing a licence id
+  is not enough to claim the licence. A second install refreshing the same
+  licence from a different host gets no key for its host, and the vendor
+  sees the copy. Extra hosts (staging) are added on request.
 - **Unbound keys** (no `hosts`) are for offline Enterprise installs, or on
   request. The seat report covers them.
 
@@ -344,7 +346,7 @@ way the vendor could trust, so the licence terms back it, not cryptography.
 | LIC-24 | Seats are distinct human users active in the last 30 days (LIC-4 window). Up to 10 % over (min. 1) shows an admin banner and is reported for true-up; beyond that users who are not already active cannot sign in. Active users, and superusers of a keyed install, are never refused. | M |
 | LIC-25 | Licence expiry is evaluated against the latest date the install has recorded, so setting the clock back has no effect. | S |
 | LIC-26 | Keys come from `APP_LICENSE_KEY` or the database (admin paste or refresh). The valid key that expires last wins. One licence is active at a time; seats never add up across keys. | M |
-| LIC-27 | Keyed installs run a daily licence refresh (licence id, install id, host, active user count → renewed key). On by default, can be disabled, payload visible to the admin. Failure or being disabled never changes behaviour. Not telemetry: no fingerprint, no user identifiers. | S |
+| LIC-27 | Keyed installs run a daily licence refresh (licence id, key digest, install id, host, active user count → renewed key). On by default, can be disabled, payload visible to the admin. Failure or being disabled never changes behaviour. Not telemetry: no fingerprint, no user identifiers. | S |
 | LIC-28 | No enforcement depends on reaching a vendor service. Key `expires_at` is the end of the paid period; expiry follows LIC-5 and never blocks reading or export. | M |
 | LIC-29 | A key may carry `hosts`; the install compares them with the host users reach it on (loopback always allowed). A mismatch follows the expired path. Keys are bound at checkout or on first refresh. | S |
 | LIC-30 | The admin can export a seat report (distinct active users per period, peak overage) for offline true-up. | S |
