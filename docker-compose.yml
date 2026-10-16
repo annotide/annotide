@@ -316,6 +316,28 @@ services:
     networks:
       - annotation-net
 
+  # SAM2 for the smart polygon tool (ML-7), only with `--profile sam2`:
+  # `make sam2`. The `sam2` target of the same Dockerfile, with SAM 2.1 tiny
+  # baked in (SAM2_MODEL=small for the larger one). `make seed` registers it
+  # as a segment model when it is running.
+  model-sam2:
+    build:
+      context: ./model-service
+      target: sam2
+      args:
+        SAM2_MODEL: ${SAM2_MODEL:-tiny}
+    image: annotide-model-sam2:local
+    profiles: ["sam2"]
+    environment:
+      MODEL_API_KEY: ${MODEL_API_KEY:-}
+      # Items whose encoder output stays in memory (~17 MB each).
+      SAM2_CACHE_ITEMS: ${SAM2_CACHE_ITEMS:-16}
+      OCR_ENGINE: none
+    ports:
+      - "127.0.0.1:${MODEL_SAM2_HOST_PORT:-9002}:9000"
+    networks:
+      - annotation-net
+
   frontend:
     build:
       context: ./frontend

@@ -13,6 +13,17 @@ COPY app ./app
 # `llm`: the Anthropic SDK for OCR_ENGINE=anthropic.
 RUN pip install ".[llm]"
 
+# The SAM2 image (`--target sam2`) adds onnxruntime ...
+FROM builder AS builder-sam2
+RUN pip install ".[llm,onnx]"
+
+# ... and SAM 2.1 weights, pinned by revision and SHA-256. SAM2_MODEL is
+# tiny (default, ~155 MB) or small (~185 MB, a little more accurate).
+FROM python:3.12-slim AS sam2-weights
+ARG SAM2_MODEL=tiny
+COPY tools/fetch_sam2.py /tmp/fetch_sam2.py
+RUN python /tmp/fetch_sam2.py "$SAM2_MODEL" /models
+
 # ---------------------------------------------------------------------------
 # Runtime
 # ---------------------------------------------------------------------------
@@ -46,3 +57,21 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -fsS http://localhost:9000/health || exit 1
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "9000"]
+
+# ---------------------------------------------------------------------------
+# annotide-model-sam2: interactive segmentation for the smart polygon tool
+# (ML-7). `docker build --target sam2`; the plain build stays the lean
+# default image below.
+# ---------------------------------------------------------------------------
+FROM runtime AS sam2
+ARG SAM2_MODEL=tiny
+COPY --from=builder-sam2 /opt/venv /opt/venv
+COPY --from=sam2-weights /models /models
+ENV MODEL_BACKEND=sam2 \
+    MODEL_PATH=/models/sam2.1-hiera-${SAM2_MODEL}
+
+# ---------------------------------------------------------------------------
+# The default image, built when no target is named. Last, so it stays the
+# default.
+# ---------------------------------------------------------------------------
+FROM runtime AS default

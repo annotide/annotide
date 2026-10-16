@@ -595,7 +595,9 @@ interface (`model-service/` is the reference): the platform calls
 `{endpoint_url}/info` and `{endpoint_url}/predict`, and — for `segment` models
 driving the annotator's smart-polygon tool (ML-7) — `{endpoint_url}/interactive`
 with `{item_id, url, width, height, point? | box?}` (see
-`model-service/app/schemas.py::InteractiveRequest`).
+`model-service/app/schemas.py::InteractiveRequest`). Its `sam2` backend
+(image `annotide-model-sam2`) is a real one: SAM 2.1, `/interactive` only,
+`/info` `task: "segment"`; a prompt with no object under it answers `400`.
 The reference service takes an optional `MODEL_API_KEY` (unset = open):
 when set, every route but `/health` and `/ready` needs `Authorization:
 Bearer <key>`, which the platform sends for a model registered with the

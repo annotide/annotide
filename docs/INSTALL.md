@@ -54,6 +54,7 @@ Every tagged release (`.github/workflows/release.yml`) builds, signs
 | `ghcr.io/annotide/annotide-backend` | `backend/` — also the worker (same image, different command) |
 | `ghcr.io/annotide/annotide-frontend` | `frontend/` |
 | `ghcr.io/annotide/annotide-model` | `model-service/` (reference BYOM model service) |
+| `ghcr.io/annotide/annotide-model-sam2` | `model-service/`, target `sam2`: the same service with SAM 2.1 tiny for the smart polygon tool (`model.sam2` in the chart) |
 
 Each is tagged `X.Y.Z`, `X.Y`, `X` (once X ≥ 1) and `latest`. The Helm chart
 is published the same way, as `oci://ghcr.io/annotide/charts/annotide`

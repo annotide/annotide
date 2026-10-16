@@ -21,10 +21,12 @@ import argparse
 import asyncio
 import contextlib
 import sys
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+import httpx
 from sqlalchemy import delete, exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -121,6 +123,11 @@ DEMO_MODEL_URL = "http://model:9000"
 #: `/interactive` answers a polygon for any click or box, so the tool can be
 #: tried (and E2E-tested) with no weights.
 DEMO_SEGMENT_MODEL_NAME = "Reference segmenter (compose)"
+#: SAM2 from the `sam2` compose profile (`annotide-model-sam2`), registered
+#: only when it answers at seed time: a model the picker offers but nobody
+#: started would fail every click.
+DEMO_SAM2_MODEL_NAME = "SAM2 (compose)"
+DEMO_SAM2_URL = "http://model-sam2:9000"
 DEMO_CLASS_MAPPING: dict[str, str | None] = {"object": "car"}
 #: A distillation + quantization family for the Models page's family view
 #: (EXP-8). External producers (no endpoint), so prelabelling never offers
@@ -254,6 +261,51 @@ async def _prepare_storage(
 # --------------------------------------------------------------------------- #
 # Database wiring
 # --------------------------------------------------------------------------- #
+
+
+async def _sam2_running() -> bool:
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            response = await client.get(f"{DEMO_SAM2_URL}/ready")
+    except httpx.HTTPError:
+        return False
+    return response.is_success
+
+
+async def _seed_sam2(
+    session: AsyncSession,
+    org_id: UUID,
+    *,
+    running: Callable[[], Awaitable[bool]] = _sam2_running,
+) -> None:
+    """Register the SAM2 service as a segment model when its profile is up (ML-7)."""
+    existing = await session.scalar(
+        select(Model).where(
+            Model.organization_id == org_id,
+            Model.name == DEMO_SAM2_MODEL_NAME,
+            Model.deleted_at.is_(None),
+        )
+    )
+    if existing is not None:
+        return
+    if not await running():
+        print(
+            f"SAM2 is not running ({DEMO_SAM2_URL}); start it with "
+            "`docker compose --profile sam2 up -d model-sam2` and seed again to register it"
+        )
+        return
+    session.add(
+        Model(
+            organization_id=org_id,
+            name=DEMO_SAM2_MODEL_NAME,
+            task=ModelTask.SEGMENT,
+            endpoint_url=DEMO_SAM2_URL,
+            identity_type="none",
+            secret_ref=None,
+        )
+    )
+    await session.flush()
+    print(f"Registered segment model {DEMO_SAM2_MODEL_NAME!r} for the smart polygon tool")
 
 
 async def _seed_model_family(session: AsyncSession, organization_id: UUID) -> None:
@@ -504,6 +556,7 @@ async def _seed(count: int | None, admin_email: str | None, admin_password: str 
                 f"Registered segment model {DEMO_SEGMENT_MODEL_NAME!r} for the smart polygon tool"
             )
 
+        await _seed_sam2(session, org.id)
         await _seed_model_family(session, org.id)
 
         # Items whose objects were just deleted from storage. The scan below

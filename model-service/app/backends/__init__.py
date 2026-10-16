@@ -11,7 +11,8 @@ def get_backend(name: str | None = None) -> ModelBackend:
     """Instantiate the backend named by `name`, or the `MODEL_BACKEND` env var.
 
     Defaults to `heuristic` — the offline, no-weights demo backend. Set
-    `MODEL_BACKEND=onnx` (and `MODEL_PATH`) to load a real ONNX detector.
+    `MODEL_BACKEND=onnx` (and `MODEL_PATH`) to load a real ONNX detector, or
+    `MODEL_BACKEND=sam2` (`MODEL_PATH` a directory) for interactive segmentation.
     """
     backend_name = name or os.environ.get("MODEL_BACKEND", "heuristic")
 
@@ -23,5 +24,11 @@ def get_backend(name: str | None = None) -> ModelBackend:
         from app.backends.onnx import OnnxBackend
 
         return OnnxBackend()
+    if backend_name == "sam2":
+        from app.backends.sam2 import Sam2Backend
 
-    raise ValueError(f"unknown MODEL_BACKEND '{backend_name}': expected 'heuristic' or 'onnx'")
+        return Sam2Backend()
+
+    raise ValueError(
+        f"unknown MODEL_BACKEND '{backend_name}': expected 'heuristic', 'onnx' or 'sam2'"
+    )

@@ -110,6 +110,10 @@ mlflow: ## Local MLflow server for the ML platform integration (API-6) on :5001;
 emulators: ## AWS (S3 + Secrets Manager via Moto) and GCS emulators plus a webhook echo receiver, next to Azurite (docs/LOCAL_CLOUDS.md)
 	$(COMPOSE) --profile emulators up -d --wait azurite s3 gcs webhook-sink mailpit
 
+.PHONY: sam2
+sam2: ## SAM2 for the smart polygon tool (ML-7) on :9002; run `make seed` after to register it
+	$(COMPOSE) --profile sam2 up -d --build --wait model-sam2
+
 .PHONY: seed-emulators
 seed-emulators: emulators ## Demo projects on the S3 and GCS emulators and a webhook to the echo receiver; run after `make seed`
 	$(COMPOSE) run --rm backend python -m app.demo seed-emulators

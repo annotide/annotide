@@ -126,6 +126,7 @@ are found on scans too.
 | --------------- | ---------- |
 | `heuristic` (default) | Edge-energy detector. No weights, no network, works offline and in CI. |
 | `onnx` | Loads a detector from `MODEL_PATH` via onnxruntime. |
+| `sam2` | SAM 2.1 interactive segmentation from the `MODEL_PATH` directory: `/interactive` only (below). |
 
 **The heuristic backend is not a useful model.** It finds high-contrast regions
 and calls them objects. It exists so the pre-labelling loop, the correction
@@ -161,6 +162,32 @@ padded-input pixels and must be mapped back. Getting the padding offset wrong
 produces boxes that look plausible but drift consistently toward one corner —
 so `LetterboxTransform` is a separate, unit-tested class.
 
+### SAM2
+
+The `annotide-model-sam2` image (`docker build --target sam2`, `make sam2` in
+compose, `model.sam2: true` in the chart) runs `MODEL_BACKEND=sam2` with Meta's
+SAM 2.1 baked in: hiera tiny by default, `--build-arg SAM2_MODEL=small` for the
+larger one. Weights are the `onnx-community` ONNX exports of the Apache-2.0
+checkpoints, pinned by revision and SHA-256 in `tools/fetch_sam2.py`, which
+also fetches them for a local run:
+
+```sh
+.venv/bin/python tools/fetch_sam2.py tiny ../.models
+MODEL_BACKEND=sam2 MODEL_PATH=../.models/sam2.1-hiera-tiny .venv/bin/uvicorn app.main:app --port 9000
+```
+
+Register it as a **segment** model; it answers `/interactive` (a point or a
+box, not text) with the outline of the object under the prompt, and refuses
+`/predict` and `/embed`. SAM2 has a heavy image encoder and a light prompt
+decoder: the first click on an item runs both (about a second on a CPU), and
+every later click on it only the decoder (tens of milliseconds), because the
+encoder output of the last `SAM2_CACHE_ITEMS` items stays in memory. Nothing
+is written to disk. "No object at this prompt" is a `400`.
+
+The mask is turned into one polygon in numpy (`backends/masks.py`): the region
+under the click (or the largest one for a box), its outer boundary, simplified
+to at most 200 vertices. Holes are dropped.
+
 ## Wrapping your own model
 
 ```python
@@ -185,7 +212,8 @@ six endpoints from your own stack — that is the whole point of the contract.
 | Variable | Default | Meaning |
 | -------- | ------- | ------- |
 | `MODEL_BACKEND` | `heuristic` | which backend to load |
-| `MODEL_PATH` | — | `.onnx` file, required by the onnx backend |
+| `MODEL_PATH` | — | `.onnx` file, required by the onnx backend; a directory for sam2 |
+| `SAM2_CACHE_ITEMS` | `16` | sam2: items whose encoder output stays in memory (~17 MB each) |
 | `PORT` | `9000` | listen port |
 | `MODEL_API_KEY` | — | when set, every route except `/health` and `/ready` needs `Authorization: Bearer <key>` (see below) |
 | `OCR_ENGINE` | `auto` | `auto`, `none`, `tesseract`, `anthropic`, `openai` (above) |
