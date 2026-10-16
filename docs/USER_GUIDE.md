@@ -34,13 +34,23 @@ item from the grid is only browsing and takes no task.
 
 | Item | How you annotate |
 | ---- | ---------------- |
-| **Image** | Pick a class, then a tool: Select (V), Hand (H), Box (B), Rotated box (R), Polygon (G), Polyline (L), Point (P), Smart polygon (S, a model draws the outline from a click or a box), Keypoints (J), Brush (K) and Eraser (E) for masks, Superpixels (X), Measure (M). Zoom with the wheel or + / −, fit with 0. Move the view by dragging empty image with Select, anywhere with Hand, with the middle mouse button, or by holding Space (you return to your tool on release). Delete or Backspace removes the selected shape. Very large images load tile by tile. |
+| **Image** | Pick a class, then a tool: Select (V), Hand (H), Box (B), Rotated box (R), Polygon (G), Polyline (L), Point (P), Smart polygon (S, a model draws the outline from a click or a box; see below), Keypoints (J), Brush (K) and Eraser (E) for masks, Superpixels (X), Measure (M). Zoom with the wheel or + / −, fit with 0. Move the view by dragging empty image with Select, anywhere with Hand, with the middle mouse button, or by holding Space (you return to your tool on release). Delete or Backspace removes the selected shape. Very large images load tile by tile. |
 | **Video** | Boxes as keyframes on a track; frames in between are interpolated. Step frame by frame and mark where an object leaves the view. |
 | **Text** | Select text to mark a span of the active class; link two spans with **Link** (R) to make a relation. |
 | **PDF** | Boxes and text spans per page; **Read text (OCR)** for scanned pages. |
 | **Audio** | Drag across the waveform to mark a segment; type the speaker and the transcript in the list below. **K** plays and pauses; Delete removes the selected segment. |
 | **Time series** | Each channel has its own lane. Drag across the plot to mark an interval, and choose whether it covers every channel or only the ones shown. |
 | **LLM evaluation** | Read the conversation and the candidate responses. Rank them (move up / down), or pick the better of two. Rate each response, each turn or the whole conversation on the scale. |
+
+**Smart polygon.** Pick the model under *Smart polygon* in the sidebar
+(your administrator registers it, for example the bundled SAM2), press
+**S**, then click an object or drag a box around it; the outline arrives as
+an ordinary polygon you can edit. The first click on an image takes about a
+second while the model reads it, later clicks are near-instant. A class
+only takes the shapes its schema allows: if the active class is box-only,
+the canvas says so and nothing is drawn, so pick a class that allows
+polygons first. The same holds for every drawing tool, and a submit that
+still breaks a schema rule lists what is wrong.
 
 **Context.** When the item has companion views (a caption, a second image,
 the source text), they appear under **Context** in the right panel. Answer
