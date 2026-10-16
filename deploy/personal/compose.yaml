@@ -150,6 +150,23 @@ services:
       OCR_ENGINE: ${OCR_ENGINE:-auto}
       OCR_LANGUAGES: ${OCR_LANGUAGES:-eng}
 
+  # SAM2 for the Smart polygon tool (ML-7): click an object or drag a box and
+  # get its outline. Runs on the CPU, no GPU needed; the image is about 1 GB.
+  # Off by default; add `sam2` to COMPOSE_PROFILES in .env to start it, then
+  # register it in the app under Models as task "Segment" with the endpoint
+  # http://model-sam2:9000 (see README.md).
+  model-sam2:
+    image: ${ANNOTIDE_REGISTRY:-ghcr.io/annotide}/annotide-model-sam2:${ANNOTIDE_VERSION:-latest}
+    restart: unless-stopped
+    profiles: ["sam2"]
+    environment:
+      # Same key as the reference model service, if you set one.
+      MODEL_API_KEY: ${MODEL_API_KEY:-}
+      # Images whose encoding stays in memory (~17 MB each); later clicks on
+      # them take tens of milliseconds instead of about a second.
+      SAM2_CACHE_ITEMS: ${SAM2_CACHE_ITEMS:-16}
+      OCR_ENGINE: none
+
 volumes:
   postgres_data:
   redis_data:

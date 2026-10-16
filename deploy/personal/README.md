@@ -64,6 +64,27 @@ Common ones:
   pre-labelling. Without it, register your own model endpoint in the UI.
 - `MODEL_BACKEND` / `MODEL_PATH` — point the bundled model service at a
   real ONNX detector instead of the heuristic one (needs `COMPOSE_PROFILES=models`).
+- `COMPOSE_PROFILES=sam2` — starts SAM2 for the Smart polygon tool (below).
+  With the reference model too: `COMPOSE_PROFILES=models,sam2`.
+
+### Smart polygon with SAM2
+
+SAM2 outlines the object you click, or the one inside a box you drag, in the
+annotator's Smart polygon tool (`S`). It runs on the CPU in its own
+container (`annotide-model-sam2`, about 1 GB) and keeps your images on this
+machine.
+
+1. Add `COMPOSE_PROFILES=sam2` to `.env`, then `docker compose up -d`.
+2. In the app, open **Models** → **Register model**: any name, **Task**
+   *Segment*, **Endpoint URL** `http://model-sam2:9000`.
+3. In the annotator, press `S`, pick the model under **Smart polygon**, and
+   click an object.
+
+The first click on an image takes about a second while SAM2 reads the image;
+further clicks on it answer in tens of milliseconds. The last
+`SAM2_CACHE_ITEMS` images (default 16, about 17 MB of memory each) stay
+ready. The class you draw in must allow polygons; the canvas says so if it
+does not.
 
 ### Storage
 
