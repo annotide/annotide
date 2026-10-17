@@ -212,3 +212,10 @@ with the command the installer prints (`docker volume rm
 annotide_postgres_data`, after removing the old containers if they still
 exist). Deleting the volume cannot be undone; the installer never does it
 for you.
+
+`.env` holds the database password and the token signing key, so keep the
+copy readable by you only, as the installer created it:
+
+```sh
+cp -p /path/to/earlier/.env ~/annotide/.env && chmod 600 ~/annotide/.env
+```

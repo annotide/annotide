@@ -105,8 +105,11 @@ only accepts the database password from that install's .env. With a newly
 generated .env the backend could not sign in to it, so nothing has been
 started. Choose one:
 
-  1. Keep the old data: copy the earlier install's .env to
-     $dir/.env, then run this script again.
+  1. Keep the old data: copy the earlier install's .env here, then run
+     this script again. It holds the database password and the token
+     signing key, so keep it readable by you only:
+
+       cp -p /path/to/earlier/.env $dir/.env && chmod 600 $dir/.env
 
   2. Start over: delete the old database, then run this script again:
 

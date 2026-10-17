@@ -159,7 +159,9 @@ test_reinstall() {
     run_install first ADMIN_EMAIL="$admin_email" ADMIN_PASSWORD=first-password-1
     expect_running first
     sign_in first-password-1 || fail "first: the admin cannot sign in"
+    # A backup made with a plain cp: readable by everyone until restored.
     cp "$work/first/.env" "$work/first.env"
+    chmod 644 "$work/first.env"
 
     log "Reinstall into a new directory, the first stack still running"
     containers_before=$(project_containers)
@@ -168,7 +170,14 @@ test_reinstall() {
     sign_in first-password-1 || fail "second: the first stack stopped serving"
 
     log "Way out 1: the earlier .env restored keeps the old data"
-    cp "$work/first.env" "$work/second/.env"
+    # The copy command the message prints, with the earlier .env's path.
+    cmd=$(grep -E '^[[:space:]]*cp -p ' "$work/second.err" | head -n 1 \
+        | sed -e 's/^[[:space:]]*//' -e "s|/path/to/earlier/.env|$work/first.env|")
+    [ -n "$cmd" ] || fail "second: found no copy command in the message"
+    log "Running the printed command: $cmd"
+    sh -c "$cmd" || fail "second: the printed copy command failed: $cmd"
+    [ -n "$(find "$work/second/.env" -perm 600)" ] \
+        || fail "second: the restored .env is not readable by its owner only (mode 600)"
     run_install second ADMIN_EMAIL="$admin_email" ADMIN_PASSWORD=second-password-2
     expect_running second
     sign_in first-password-1 || fail "second: the old admin cannot sign in with the old data"
