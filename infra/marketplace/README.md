@@ -70,7 +70,11 @@ Center account):
    `AcrPull` on it, and the subscription needs the
    `Microsoft.PartnerCenterIngestion` resource provider.
 2. An Entra app with `AcrPush` on the registry and a federated credential
-   for `repo:annotide/annotide:environment:marketplace`.
+   for `repo:annotide@337994303/annotide@1405340040:environment:marketplace`.
+   The annotide org puts immutable owner and repository IDs in its OIDC
+   subjects. In R-Squared-Data-Solutions/azure-infra, `bootstrap/` makes
+   items 1 and 2 and `modules/annotide_marketplace` the registry (its README,
+   "Annotide Marketplace registry").
 3. Repository variables `MARKETPLACE_ACR` (for example
    `annotidemarketplace.azurecr.io`), `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`
    and `AZURE_SUBSCRIPTION_ID`, and a `marketplace` environment. No secrets
