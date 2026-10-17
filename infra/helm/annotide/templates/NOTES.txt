@@ -17,3 +17,9 @@ Create the first administrator:
 
 Check the installation:
   helm test {{ .Release.Name }} -n {{ .Release.Namespace }}
+{{- if .Values.postgresql.enabled }}
+
+PostgreSQL runs in the cluster ({{ include "ap.postgresqlName" . }}-0): one pod, no
+failover and no backups. Schedule pg_dump or volume snapshots (docs/BACKUP.md);
+for production, use a managed PostgreSQL via database.url.
+{{- end }}

@@ -1,9 +1,12 @@
 # annotide Helm chart
 
 Deploys the API, the arq worker, the web frontend and (optionally) the
-reference model service. **PostgreSQL 16 and Redis 7 are external**: use your
-cloud's managed services or your own operators. Media never passes through
-the cluster: browsers read and write customer storage through signed URLs.
+reference model service. **PostgreSQL 16 and Redis 7 are external** in
+production: use your cloud's managed services or your own operators. For
+small and evaluation installs the chart can run both in the cluster instead
+(see [In-cluster PostgreSQL and Valkey](#in-cluster-postgresql-and-valkey)).
+Media never passes through the cluster: browsers read and write customer
+storage through signed URLs.
 
 ## What it creates
 
@@ -13,7 +16,9 @@ the cluster: browsers read and write customer storage through signed URLs.
 | `worker` | Deployment | `arq app.worker.main.WorkerSettings`; liveness `python -m app.worker.check` (the heartbeat key `arq --check` reads, signed in like the worker); `/tmp` scratch for tiling (`worker.scratch.sizeLimit`) |
 | `frontend` | Deployment + Service + ConfigMap | nginx on 8080 with the chart's config, proxying `/api/` to this release's backend |
 | `model` | Deployment + Service | only with `model.enabled` (reference BYOM service on 9000) |
-| `migrate` | Job (hook) | `alembic upgrade head` before every install and upgrade |
+| `migrate` | Job (hook) | `alembic upgrade head` before every install and upgrade (after the first install with the in-cluster PostgreSQL) |
+| `postgresql` | StatefulSet + Service + Secret | only with `postgresql.enabled`; one pod on a PVC |
+| `valkey` | Deployment + Service + Secret | only with `valkey.enabled`; no persistence |
 | Ingress, PDBs, ServiceAccount | | optional / defaults on where it makes sense |
 | NetworkPolicies | | only with `networkPolicy.enabled`; ingress rules per component |
 | HPA (API), KEDA ScaledObject (worker) | | only with `backend.autoscaling.enabled` / `worker.autoscaling.enabled` (OPS-5) |
@@ -79,6 +84,55 @@ helm test annotate -n annotate   # frontend → API → database + Redis
   service from the API and worker, and the worker and migration Job from
   nothing. Egress is left open: storage and model endpoints are the
   customer's and can be anywhere. Needs a CNI that enforces policies.
+
+## In-cluster PostgreSQL and Valkey
+
+For installs that cannot or need not use managed services (the Azure
+Marketplace offer turns both on by default: its ARM template may create only
+the AKS cluster and the extension), leave `database.url` / `redis.url` empty
+and set:
+
+```sh
+  --set postgresql.enabled=true --set valkey.enabled=true
+```
+
+The two are independent: an external PostgreSQL with an in-cluster Valkey
+works too. Setting both a URL and the matching `enabled` fails the render.
+
+- **PostgreSQL 16** (`postgres` image) runs as one StatefulSet pod with its
+  data on a PVC (`postgresql.persistence.size`, default 32 Gi, on the
+  cluster's default StorageClass). The data survives pod restarts, node
+  replacement, upgrades and `helm uninstall`: the PVC is not part of the
+  release, nor is the `<release>-postgresql` Secret with the password the
+  data directory was initialised with, so a reinstall under the same name
+  finds both. On AKS, `postgresql.persistence.azureDisk.enabled` creates a
+  StorageClass with `reclaimPolicy: Retain`, so the disk also outlives a
+  deleted PVC or namespace (then rebind the released PV by hand); set its
+  `skuName` to `StandardSSD_ZRS` or `Premium_ZRS` in a region with
+  availability zones to survive a zone outage. Nothing survives deleting the
+  AKS cluster: its disks live in the node resource group.
+- **No failover and no backups.** Schedule `pg_dump` or volume snapshots
+  ([docs/BACKUP.md](../../../docs/BACKUP.md)). Move to a managed server with
+  a dump and restore; switching an existing release between in-cluster and
+  external is not an upgrade.
+- **Valkey** (BSD-licensed and Redis-compatible) runs as one Deployment pod
+  without persistence and with a generated password. The queue holds only
+  job ids; the worker queues lost jobs again from their PostgreSQL rows
+  within five minutes.
+- Passwords are generated on the first install and read back from the live
+  Secrets on upgrades. `helm template` (GitOps) cannot read them: set
+  `postgresql.password` and `valkey.password`. With `secrets.existingSecret`
+  they are required, and your Secret's `APP_DATABASE_URL` and
+  `APP_REDIS_URL` must use them
+  (`postgresql+asyncpg://annotation:<pw>@<release>-annotide-postgresql:5432/annotation`,
+  `redis://:<pw>@<release>-annotide-valkey:6379/0`).
+- On the first install the migration runs after the release (post-install)
+  instead of before it, once the database exists; the API and worker start
+  without the schema meanwhile (readiness checks only that the database
+  answers). Upgrades migrate first, as with an external database.
+- With `networkPolicy.enabled`, PostgreSQL accepts the API, worker and
+  migration Job, plus `networkPolicy.postgresqlExtraFrom` (KEDA's operator
+  for `worker.autoscaling`, a backup job); Valkey accepts the API and worker.
 
 ## Autoscaling (OPS-5)
 
