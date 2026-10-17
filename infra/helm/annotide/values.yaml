@@ -22,6 +22,15 @@ image:
     tag: ""
 imagePullSecrets: []
 
+# -- Azure Marketplace only: the bundle lists every image here, by key
+# (backend, frontend, model, modelSam2, postgresql, valkey), as
+# `{registry, image, tag | digest}`, and Microsoft rewrites them to its own
+# registry. A key set here wins over `image.*` / `<component>.image`
+# (infra/marketplace/). Leave empty otherwise.
+global:
+  azure:
+    images: {}
+
 nameOverride: ""
 fullnameOverride: ""
 
@@ -30,7 +39,9 @@ fullnameOverride: ""
 # default OIDC redirect URI. Defaults to the first ingress host.
 publicUrl: ""
 
-# -- External PostgreSQL 16 and Redis 7 (not deployed by this chart).
+# -- External PostgreSQL 16 and Redis 7, the production setup. Leave a URL
+# empty and turn on `postgresql.enabled` / `valkey.enabled` below to run that
+# service in the cluster instead.
 # With Microsoft Entra sign-in (config APP_DATABASE_AUTH / APP_REDIS_AUTH =
 # entra, as infra/terraform/azure sets) the URLs carry no password.
 database:
@@ -39,6 +50,68 @@ database:
 redis:
   # redis://host:6379/0 (rediss:// for TLS) — goes into the Secret.
   url: ""
+
+# -- In-cluster PostgreSQL 16: one StatefulSet pod on a persistent volume,
+# for small and evaluation installs (the Azure Marketplace offer turns it on
+# by default; its template cannot create a managed database). No failover
+# and no backups: back up with pg_dump (docs/BACKUP.md) or volume snapshots.
+# Choose at install time; moving between in-cluster and external is a
+# pg_dump / restore.
+postgresql:
+  enabled: false
+  image:
+    registry: docker.io
+    repository: library/postgres
+    tag: 16.15-alpine
+  # The image's postgres user.
+  uid: 70
+  database: annotation
+  username: annotation
+  # Empty: generated on the first install and kept in the <release>-postgresql
+  # Secret, which `helm uninstall` leaves behind with the data so a reinstall
+  # finds both. Required with `secrets.existingSecret` (your Secret's
+  # APP_DATABASE_URL must use it) and with `helm template` (GitOps).
+  password: ""
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { memory: 2Gi }
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  persistence:
+    size: 32Gi
+    # Empty: the cluster's default StorageClass, unless azureDisk is on.
+    storageClass: ""
+    # A StorageClass of this chart's own on AKS: Azure Disk with
+    # reclaimPolicy Retain, so the disk outlives a deleted PVC or namespace
+    # (it is still deleted with the cluster's node resource group). ZRS
+    # (StandardSSD_ZRS, Premium_ZRS) survives a zone outage but exists only
+    # in regions with availability zones.
+    azureDisk:
+      enabled: false
+      skuName: StandardSSD_LRS
+
+# -- In-cluster Valkey (BSD-licensed and Redis-compatible): one Deployment
+# pod, password-protected, without persistence. The queue keeps only job ids;
+# the job rows in PostgreSQL are the source of truth, and the worker queues
+# lost ones again within five minutes.
+valkey:
+  enabled: false
+  image:
+    registry: docker.io
+    repository: valkey/valkey
+    tag: 9.1.2-alpine
+  # The image's valkey user.
+  uid: 999
+  # Empty: generated, then kept from the live <release>-valkey Secret.
+  # Required with `secrets.existingSecret` and with `helm template`.
+  password: ""
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { memory: 512Mi }
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
 
 # -- Secret values. Leave `existingSecret` empty to let the chart create one
 # from the values below; set it to use a Secret you manage (sealed-secrets,
@@ -53,6 +126,12 @@ secrets:
   # `python -m app.cli reseal-secrets` in a backend pod, wait an hour
   # (APP_ACCESS_TOKEN_TTL), then clear secretKeyPrevious.
   secretKey: ""
+  # With secretKey empty: generate one on the first install and keep it in
+  # the <release>-secret-key Secret, which `helm uninstall` leaves behind
+  # (the key seals MFA and webhook secrets in the database). For installs
+  # with no one to supply a key, such as the Azure Marketplace; not with
+  # `helm template`, which cannot read the live Secret.
+  generateSecretKey: false
   secretKeyPrevious: ""
   oidcClientSecret: ""
   # SMTP password for notification e-mail (API-7), with smtp.username.
@@ -261,6 +340,9 @@ ingress:
   clusterIssuer: ""
   hosts:
     - host: annotate.example.com
+  # One host as a plain string; replaces `hosts` when set (for tools that
+  # cannot set list entries, such as Azure cluster extension settings).
+  host: ""
   tls: []
   #  - secretName: annotate-tls
   #    hosts: [annotate.example.com]
@@ -280,6 +362,9 @@ networkPolicy:
   ingressFrom: []
   # Extra peers allowed to reach the API directly (e.g. a metrics scraper).
   backendExtraFrom: []
+  # Extra peers allowed to reach the in-cluster PostgreSQL, e.g. KEDA's
+  # operator for `worker.autoscaling`, or a backup job.
+  postgresqlExtraFrom: []
 
 # -- Alert rules (OPS-4) as a PrometheusRule (prometheus-operator). Needs
 # `otel.enabled` and a collector that exports metrics to Prometheus with the

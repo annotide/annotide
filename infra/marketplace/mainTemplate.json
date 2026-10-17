@@ -1,0 +1,204 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "type": "string",
+      "metadata": {
+        "description": "The location of the AKS cluster."
+      }
+    },
+    "extensionResourceName": {
+      "type": "string",
+      "metadata": {
+        "description": "Name of the Annotide extension; also its Helm release name."
+      }
+    },
+    "clusterResourceName": {
+      "type": "string",
+      "metadata": {
+        "description": "The name of the AKS cluster."
+      }
+    },
+    "createNewCluster": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Create a new AKS cluster; otherwise install on an existing one."
+      }
+    },
+    "kubernetesVersion": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Kubernetes version of a new cluster."
+      }
+    },
+    "vmSize": {
+      "type": "string",
+      "defaultValue": "Standard_D4s_v5",
+      "metadata": {
+        "description": "Node VM size of a new cluster."
+      }
+    },
+    "vmCount": {
+      "type": "int",
+      "defaultValue": 1,
+      "metadata": {
+        "description": "Node count of a new cluster (the minimum with autoscaling)."
+      }
+    },
+    "vmEnableAutoScale": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Enable the cluster autoscaler on a new cluster."
+      }
+    },
+    "osSKU": {
+      "type": "string",
+      "defaultValue": "AzureLinux",
+      "allowedValues": [
+        "AzureLinux",
+        "Ubuntu"
+      ],
+      "metadata": {
+        "description": "Node OS of a new cluster."
+      }
+    },
+    "databaseMode": {
+      "type": "string",
+      "defaultValue": "inCluster",
+      "allowedValues": [
+        "inCluster",
+        "existing"
+      ],
+      "metadata": {
+        "description": "inCluster: PostgreSQL and Valkey run in the cluster. existing: connect existing services."
+      }
+    },
+    "zoneRedundantDisk": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Put the in-cluster PostgreSQL on a zone-redundant (ZRS) disk."
+      }
+    },
+    "databaseUrl": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Existing PostgreSQL 16: postgresql+asyncpg://user:password@host:5432/db?ssl=require"
+      }
+    },
+    "redisUrl": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Existing Redis: rediss://:password@host:port/0"
+      }
+    },
+    "licenseKey": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional Annotide licence key; without one the install runs as Community."
+      }
+    },
+    "ingressHost": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional public hostname, served through an existing ingress controller."
+      }
+    },
+    "ingressClassName": {
+      "type": "string",
+      "defaultValue": "webapprouting.kubernetes.azure.com",
+      "metadata": {
+        "description": "Ingress class for the public hostname."
+      }
+    },
+    "clusterIssuer": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "cert-manager ClusterIssuer that issues the hostname's TLS certificate."
+      }
+    }
+  },
+  "variables": {
+    "plan-name": "DONOTMODIFY",
+    "plan-publisher": "DONOTMODIFY",
+    "plan-offerID": "DONOTMODIFY",
+    "releaseTrain": "DONOTMODIFY",
+    "clusterExtensionTypeName": "DONOTMODIFY"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.ContainerService/managedClusters",
+      "condition": "[parameters('createNewCluster')]",
+      "apiVersion": "2025-05-01",
+      "name": "[parameters('clusterResourceName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "Base",
+        "tier": "Free"
+      },
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "kubernetesVersion": "[if(empty(parameters('kubernetesVersion')), json('null'), parameters('kubernetesVersion'))]",
+        "enableRBAC": true,
+        "dnsPrefix": "[concat(parameters('clusterResourceName'), '-dns')]",
+        "autoUpgradeProfile": {
+          "upgradeChannel": "patch",
+          "nodeOSUpgradeChannel": "NodeImage"
+        },
+        "agentPoolProfiles": [
+          {
+            "name": "agentpool",
+            "count": "[parameters('vmCount')]",
+            "enableAutoScaling": "[parameters('vmEnableAutoScale')]",
+            "minCount": "[if(parameters('vmEnableAutoScale'), parameters('vmCount'), json('null'))]",
+            "maxCount": "[if(parameters('vmEnableAutoScale'), max(parameters('vmCount'), 5), json('null'))]",
+            "vmSize": "[parameters('vmSize')]",
+            "osType": "Linux",
+            "osSKU": "[parameters('osSKU')]",
+            "type": "VirtualMachineScaleSets",
+            "mode": "System",
+            "maxPods": 110,
+            "enableNodePublicIP": false
+          }
+        ],
+        "networkProfile": {
+          "loadBalancerSku": "standard",
+          "networkPlugin": "azure"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.KubernetesConfiguration/extensions",
+      "apiVersion": "2024-11-01",
+      "name": "[parameters('extensionResourceName')]",
+      "properties": {
+        "extensionType": "[variables('clusterExtensionTypeName')]",
+        "autoUpgradeMinorVersion": true,
+        "releaseTrain": "[variables('releaseTrain')]",
+        "configurationSettings": "[union(if(equals(parameters('databaseMode'), 'inCluster'), createObject('postgresql.enabled', 'true', 'valkey.enabled', 'true', 'postgresql.persistence.azureDisk.skuName', if(parameters('zoneRedundantDisk'), 'StandardSSD_ZRS', 'StandardSSD_LRS')), createObject('postgresql.enabled', 'false', 'valkey.enabled', 'false')), if(empty(parameters('ingressHost')), createObject(), createObject('ingress.enabled', 'true', 'ingress.host', parameters('ingressHost'), 'ingress.className', parameters('ingressClassName'), 'ingress.clusterIssuer', parameters('clusterIssuer'), 'publicUrl', concat(if(empty(parameters('clusterIssuer')), 'http', 'https'), '://', parameters('ingressHost')))))]",
+        "configurationProtectedSettings": "[union(if(equals(parameters('databaseMode'), 'inCluster'), createObject(), createObject('database.url', parameters('databaseUrl'), 'redis.url', parameters('redisUrl'))), if(empty(parameters('licenseKey')), createObject(), createObject('secrets.licenseKey', parameters('licenseKey'))))]"
+      },
+      "plan": {
+        "name": "[variables('plan-name')]",
+        "publisher": "[variables('plan-publisher')]",
+        "product": "[variables('plan-offerID')]"
+      },
+      "scope": "[concat('Microsoft.ContainerService/managedClusters/', parameters('clusterResourceName'))]",
+      "dependsOn": [
+        "[resourceId('Microsoft.ContainerService/managedClusters/', parameters('clusterResourceName'))]"
+      ]
+    }
+  ],
+  "outputs": {}
+}

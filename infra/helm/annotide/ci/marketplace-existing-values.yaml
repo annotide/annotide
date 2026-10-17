@@ -1,0 +1,20 @@
+# The Azure Marketplace install with "Use existing services": the bundle
+# turns the in-cluster services on and the form turns them off again with
+# the strings "false", which must not count as on.
+global:
+  azure:
+    images:
+      backend: { registry: ghcr.io/annotide, image: annotide-backend, tag: 0.1.0 }
+      frontend: { registry: ghcr.io/annotide, image: annotide-frontend, tag: 0.1.0 }
+      postgresql: { registry: docker.io/library, image: postgres, tag: 16.15-alpine }
+      valkey: { registry: docker.io/valkey, image: valkey, tag: 9.1.2-alpine }
+secrets:
+  generateSecretKey: true
+postgresql:
+  enabled: "false"
+valkey:
+  enabled: "false"
+database:
+  url: postgresql+asyncpg://annotation:pw@db.postgres.database.azure.com:5432/annotation?ssl=require
+redis:
+  url: rediss://:pw@cache.westeurope.redis.azure.net:10000/0

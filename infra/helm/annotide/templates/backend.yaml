@@ -35,7 +35,7 @@ spec:
         {{- include "ap.podSecurityContext" (dict "ctx" . "uid" .Values.backend.uid) | nindent 8 }}
       containers:
         - name: backend
-          image: {{ include "ap.image" (dict "ctx" . "image" .Values.image.backend) }}
+          image: {{ include "ap.image" (dict "ctx" . "key" "backend" "image" .Values.image.backend) }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           # Keep-alive outlasts the ingress's 60 s idle timeout (backend/Dockerfile).
           command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--timeout-keep-alive", "75"]

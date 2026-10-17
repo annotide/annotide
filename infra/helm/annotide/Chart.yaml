@@ -2,7 +2,8 @@ apiVersion: v2
 name: annotide
 description: >-
   Self-hosted data annotation and labeling platform: API, worker, web frontend and the
-  reference model service. PostgreSQL and Redis are external.
+  reference model service. PostgreSQL and Redis are external, or optionally in-cluster
+  (PostgreSQL and Valkey) for small installs.
 type: application
 # Set from the git tag by .github/workflows/release.yml at release time;
 # the values below are the dev/CI placeholder.
@@ -39,3 +40,7 @@ annotations:
       image: ghcr.io/annotide/annotide-frontend:0.1.0
     - name: model
       image: ghcr.io/annotide/annotide-model:0.1.0
+    - name: postgresql
+      image: docker.io/library/postgres:16.15-alpine
+    - name: valkey
+      image: docker.io/valkey/valkey:9.1.2-alpine

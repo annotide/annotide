@@ -4,7 +4,16 @@ Runs before the release's own resources exist on a first install, so it
 cannot use the release ConfigMap or Secret. With `secrets.existingSecret`
 it reads that Secret; otherwise a hook-scoped copy of the chart's secret
 keys, removed again once the migration succeeds.
+
+With the in-cluster PostgreSQL the first install migrates after the release
+instead (post-install), once the database exists; the API and worker start
+without the schema, and their readiness checks only that the database answers,
+so `helm install --wait` still completes.
 */}}
+{{- $hook := "pre-install,pre-upgrade" }}
+{{- if include "ap.postgresqlOn" . }}
+{{- $hook = "post-install,pre-upgrade" }}
+{{- end }}
 {{- if not .Values.secrets.existingSecret }}
 apiVersion: v1
 kind: Secret
@@ -13,7 +22,7 @@ metadata:
   labels:
     {{- include "ap.labels" (dict "ctx" . "component" "migrations") | nindent 4 }}
   annotations:
-    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook: {{ $hook }}
     helm.sh/hook-weight: "-5"
     helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
 type: Opaque
@@ -28,7 +37,7 @@ metadata:
   labels:
     {{- include "ap.labels" (dict "ctx" . "component" "migrations") | nindent 4 }}
   annotations:
-    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook: {{ $hook }}
     helm.sh/hook-weight: "0"
     helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
 spec:
@@ -50,9 +59,21 @@ spec:
       {{- end }}
       securityContext:
         {{- include "ap.podSecurityContext" (dict "ctx" . "uid" .Values.backend.uid) | nindent 8 }}
+      {{- if include "ap.postgresqlOn" . }}
+      initContainers:
+        - name: wait-for-postgresql
+          image: {{ include "ap.image" (dict "ctx" . "key" "postgresql" "image" .Values.postgresql.image) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # -U: this pod's user has no passwd entry for libpq to default to.
+          command: [sh, -c, 'until pg_isready -h "$0" -p 5432 -U "$1"; do sleep 2; done', {{ include "ap.postgresqlName" . | quote }}, {{ .Values.postgresql.username | quote }}]
+          resources:
+            {{- toYaml .Values.migrations.resources | nindent 12 }}
+          securityContext:
+            {{- include "ap.containerSecurityContext" . | nindent 12 }}
+      {{- end }}
       containers:
         - name: migrate
-          image: {{ include "ap.image" (dict "ctx" . "image" .Values.image.backend) }}
+          image: {{ include "ap.image" (dict "ctx" . "key" "backend" "image" .Values.image.backend) }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: ["alembic", "upgrade", "head"]
           env:

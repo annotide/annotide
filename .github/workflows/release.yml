@@ -185,7 +185,8 @@ jobs:
         run: |
           v="${{ needs.version.outputs.version }}"
           yq -i ".version = \"$v\" | .appVersion = \"$v\"" Chart.yaml
-          yq -i "(.annotations.\"artifacthub.io/images\" | from_yaml | .[].image |= sub(\":.*\$\"; \":$v\")) as \$images | .annotations.\"artifacthub.io/images\" = (\$images | to_yaml)" Chart.yaml
+          # Only our own images take the release tag; postgres and valkey keep theirs.
+          yq -i "(.annotations.\"artifacthub.io/images\" | from_yaml | (.[] | select(.image | test(\"^ghcr.io/annotide/\")) | .image) |= sub(\":.*\$\"; \":$v\")) as \$images | .annotations.\"artifacthub.io/images\" = (\$images | to_yaml)" Chart.yaml
 
       - name: helm lint
         working-directory: infra/helm
@@ -297,6 +298,59 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: ${{ matrix.package }}/dist
+
+  # Azure Marketplace bundle (infra/marketplace/README.md): assembled and
+  # checked with Microsoft's container-package-app on every run; on a tag,
+  # built and pushed to the publishing registry, once the images it bundles
+  # are on GHCR. Pushing needs the repository variables MARKETPLACE_ACR (login
+  # server), AZURE_CLIENT_ID, AZURE_TENANT_ID and AZURE_SUBSCRIPTION_ID (an
+  # app with AcrPush and a federated credential for the `marketplace`
+  # environment); without MARKETPLACE_ACR it only verifies.
+  marketplace:
+    name: azure marketplace bundle
+    needs: [version, images]
+    runs-on: ubuntu-latest
+    environment: marketplace
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      ACR: ${{ vars.MARKETPLACE_ACR }}
+      PUSH: ${{ needs.version.outputs.is_dry_run != 'true' && vars.MARKETPLACE_ACR != '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # The bundle version must be #.#.#; a dry run has none.
+      - name: Assemble the bundle
+        run: |
+          v="${{ needs.version.outputs.version }}"
+          [ "${{ needs.version.outputs.is_dry_run }}" = "true" ] && v=0.0.0
+          infra/marketplace/build.sh "$v" "${ACR:-set-by-build.azurecr.io}"
+
+      - name: Azure login (OIDC)
+        if: env.PUSH == 'true'
+        uses: azure/login@v3
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # cpa runs in Microsoft's image against the runner's Docker daemon; it
+      # pushes with the registry token handed in here.
+      - name: cpa verify / buildbundle
+        run: |
+          token=""
+          cmd="cpa verify --telemetryOptOut"
+          if [ "$PUSH" = "true" ]; then
+            token=$(az acr login --name "${ACR%%.*}" --expose-token --output tsv --query accessToken)
+            echo "::add-mask::$token"
+            cmd="echo \"\$ACR_TOKEN\" | docker login \"$ACR\" -u 00000000-0000-0000-0000-000000000000 --password-stdin && cpa buildbundle --telemetryOptOut"
+          fi
+          docker run --rm -e ACR_TOKEN="$token" \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD/infra/marketplace/build:/data" -w /data \
+            --entrypoint /bin/bash mcr.microsoft.com/container-package-app:latest -c "$cmd"
 
   # GitHub Release with the Personal install files and the packaged chart,
   # once images, chart and PyPI packages have all succeeded. Skipped

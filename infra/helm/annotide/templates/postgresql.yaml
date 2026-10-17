@@ -1,0 +1,154 @@
+{{- if include "ap.postgresqlOn" . }}
+{{- if and .Values.secrets.existingSecret (not .Values.postgresql.password) }}
+{{- fail "postgresql.password is required with secrets.existingSecret: that Secret's APP_DATABASE_URL must use it" }}
+{{- end }}
+{{- $pg := .Values.postgresql }}
+{{- $name := include "ap.postgresqlName" . }}
+{{- /*
+The password is set once, when the data directory is initialised, so this
+Secret must outlive the release together with the volume: `helm uninstall`
+keeps it, and a reinstall under the same name adopts it again.
+*/}}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "ap.labels" (dict "ctx" . "component" "postgresql") | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+type: Opaque
+stringData:
+  password: {{ include "ap.postgresqlPassword" . | quote }}
+{{- if $pg.persistence.azureDisk.enabled }}
+---
+# Cluster-scoped, so named after the namespace too.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: {{ printf "%s-%s" .Release.Namespace $name | trunc 63 | trimSuffix "-" }}
+  labels:
+    {{- include "ap.labels" (dict "ctx" . "component" "postgresql") | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+provisioner: disk.csi.azure.com
+parameters:
+  skuName: {{ $pg.persistence.azureDisk.skuName }}
+reclaimPolicy: Retain
+allowVolumeExpansion: true
+volumeBindingMode: WaitForFirstConsumer
+{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "ap.labels" (dict "ctx" . "component" "postgresql") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "ap.selectorLabels" (dict "ctx" . "component" "postgresql") | nindent 4 }}
+  ports:
+    - name: postgresql
+      port: 5432
+      targetPort: postgresql
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "ap.labels" (dict "ctx" . "component" "postgresql") | nindent 4 }}
+spec:
+  serviceName: {{ $name }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "ap.selectorLabels" (dict "ctx" . "component" "postgresql") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ap.selectorLabels" (dict "ctx" . "component" "postgresql") | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- include "ap.podSecurityContext" (dict "ctx" . "uid" $pg.uid) | nindent 8 }}
+      # Time for a clean shutdown checkpoint.
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: postgresql
+          image: {{ include "ap.image" (dict "ctx" . "key" "postgresql" "image" $pg.image) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - { name: POSTGRES_DB, value: {{ $pg.database | quote }} }
+            - { name: POSTGRES_USER, value: {{ $pg.username | quote }} }
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: {{ $name }}, key: password }
+            # A subdirectory: the volume's root holds lost+found.
+            - { name: PGDATA, value: /var/lib/postgresql/data/pgdata }
+          ports:
+            - name: postgresql
+              containerPort: 5432
+          startupProbe:
+            exec: { command: [pg_isready, -h, 127.0.0.1, -U, {{ $pg.username | quote }}, -d, {{ $pg.database | quote }}] }
+            periodSeconds: 5
+            failureThreshold: 60
+          livenessProbe:
+            exec: { command: [pg_isready, -h, 127.0.0.1, -U, {{ $pg.username | quote }}, -d, {{ $pg.database | quote }}] }
+            periodSeconds: 15
+            timeoutSeconds: 5
+          readinessProbe:
+            exec: { command: [pg_isready, -h, 127.0.0.1, -U, {{ $pg.username | quote }}, -d, {{ $pg.database | quote }}] }
+            periodSeconds: 10
+            timeoutSeconds: 5
+          resources:
+            {{- toYaml $pg.resources | nindent 12 }}
+          securityContext:
+            {{- include "ap.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+            - { name: run, mountPath: /var/run/postgresql }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+      {{- with $pg.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $pg.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $pg.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  # Not owned by the release: `helm uninstall` leaves the PVC, and the data.
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          {{- include "ap.selectorLabels" (dict "ctx" . "component" "postgresql") | nindent 10 }}
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- if $pg.persistence.azureDisk.enabled }}
+        storageClassName: {{ printf "%s-%s" .Release.Namespace $name | trunc 63 | trimSuffix "-" }}
+        {{- else if $pg.persistence.storageClass }}
+        storageClassName: {{ $pg.persistence.storageClass }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ $pg.persistence.size }}
+{{- end }}

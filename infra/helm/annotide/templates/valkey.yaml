@@ -1,0 +1,108 @@
+{{- if include "ap.valkeyOn" . }}
+{{- if and .Values.secrets.existingSecret (not .Values.valkey.password) }}
+{{- fail "valkey.password is required with secrets.existingSecret: that Secret's APP_REDIS_URL must use it" }}
+{{- end }}
+{{- $vk := .Values.valkey }}
+{{- $name := include "ap.valkeyName" . }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "ap.labels" (dict "ctx" . "component" "valkey") | nindent 4 }}
+type: Opaque
+stringData:
+  password: {{ include "ap.valkeyPassword" . | quote }}
+  # No persistence: the job rows in PostgreSQL are the queue's source of truth.
+  valkey.conf: |
+    requirepass {{ include "ap.valkeyPassword" . | quote }}
+    save ""
+    appendonly no
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "ap.labels" (dict "ctx" . "component" "valkey") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "ap.selectorLabels" (dict "ctx" . "component" "valkey") | nindent 4 }}
+  ports:
+    - name: valkey
+      port: 6379
+      targetPort: valkey
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "ap.labels" (dict "ctx" . "component" "valkey") | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "ap.selectorLabels" (dict "ctx" . "component" "valkey") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ap.selectorLabels" (dict "ctx" . "component" "valkey") | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/config: {{ include "ap.valkeyPassword" . | sha256sum }}
+    spec:
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- include "ap.podSecurityContext" (dict "ctx" . "uid" $vk.uid) | nindent 8 }}
+      containers:
+        - name: valkey
+          image: {{ include "ap.image" (dict "ctx" . "key" "valkey" "image" $vk.image) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: [valkey-server, /etc/valkey/valkey.conf]
+          ports:
+            - name: valkey
+              containerPort: 6379
+          livenessProbe:
+            tcpSocket: { port: valkey }
+            periodSeconds: 15
+          readinessProbe:
+            tcpSocket: { port: valkey }
+            periodSeconds: 5
+          resources:
+            {{- toYaml $vk.resources | nindent 12 }}
+          securityContext:
+            {{- include "ap.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - { name: config, mountPath: /etc/valkey, readOnly: true }
+            - { name: data, mountPath: /data }
+      volumes:
+        - name: config
+          secret:
+            secretName: {{ $name }}
+            items:
+              - { key: valkey.conf, path: valkey.conf }
+        - name: data
+          emptyDir: {}
+      {{- with $vk.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $vk.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $vk.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
