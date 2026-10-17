@@ -27,7 +27,7 @@ spec:
         {{- include "ap.podSecurityContext" (dict "ctx" . "uid" .Values.model.uid) | nindent 8 }}
       containers:
         - name: model
-          image: {{ include "ap.image" (dict "ctx" . "image" (ternary .Values.image.modelSam2 .Values.image.model .Values.model.sam2)) }}
+          image: {{ include "ap.image" (dict "ctx" . "key" (ternary "modelSam2" "model" (eq (toString .Values.model.sam2) "true")) "image" (ternary .Values.image.modelSam2 .Values.image.model (eq (toString .Values.model.sam2) "true"))) }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http

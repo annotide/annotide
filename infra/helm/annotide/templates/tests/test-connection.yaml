@@ -16,7 +16,7 @@ spec:
     # Through the frontend's proxy to the API's readiness check: nginx,
     # backend, database and Redis in one request.
     - name: ready
-      image: {{ include "ap.image" (dict "ctx" . "image" .Values.image.backend) }}
+      image: {{ include "ap.image" (dict "ctx" . "key" "backend" "image" .Values.image.backend) }}
       command:
         - curl
         - -fsS

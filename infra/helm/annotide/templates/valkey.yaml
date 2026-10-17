@@ -1,4 +1,4 @@
-{{- if .Values.valkey.enabled }}
+{{- if include "ap.valkeyOn" . }}
 {{- if and .Values.secrets.existingSecret (not .Values.valkey.password) }}
 {{- fail "valkey.password is required with secrets.existingSecret: that Secret's APP_REDIS_URL must use it" }}
 {{- end }}
@@ -66,7 +66,7 @@ spec:
         {{- include "ap.podSecurityContext" (dict "ctx" . "uid" $vk.uid) | nindent 8 }}
       containers:
         - name: valkey
-          image: {{ include "ap.thirdPartyImage" $vk.image }}
+          image: {{ include "ap.image" (dict "ctx" . "key" "valkey" "image" $vk.image) }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args: [valkey-server, /etc/valkey/valkey.conf]
           ports:

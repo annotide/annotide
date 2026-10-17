@@ -83,7 +83,7 @@ spec:
         {{- include "ap.podSecurityContext" (dict "ctx" . "uid" .Values.frontend.uid) | nindent 8 }}
       containers:
         - name: frontend
-          image: {{ include "ap.image" (dict "ctx" . "image" .Values.image.frontend) }}
+          image: {{ include "ap.image" (dict "ctx" . "key" "frontend" "image" .Values.image.frontend) }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http

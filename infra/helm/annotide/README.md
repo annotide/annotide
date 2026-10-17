@@ -77,6 +77,17 @@ helm test annotate -n annotate   # frontend → API → database + Redis
   to start without it.
 - The CSP's allowed media origins are baked into the frontend image at build
   time (`CSP_MEDIA_ORIGINS`, default `https:`).
+- `ingress.host` is a single hostname as a plain string. When set, it
+  replaces `ingress.hosts`, for tools that can't set list entries (Azure
+  cluster extension settings). With `ingress.clusterIssuer` the derived
+  public URL is `https://`.
+- `secrets.generateSecretKey` generates `APP_SECRET_KEY` on the first
+  install and keeps it in the `<release>-secret-key` Secret, which outlives
+  `helm uninstall`. It's for installs where nobody supplies a key (the Azure
+  Marketplace). It doesn't work with `helm template`.
+- `global.azure.images` is for the Azure Marketplace bundle only
+  ([infra/marketplace](../../marketplace/README.md)): every image as
+  `{registry, image, tag | digest}` by key, which wins over `image.*`.
 - `networkPolicy.enabled` isolates every pod: the frontend takes traffic on
   8080 from `networkPolicy.ingressFrom` (your ingress controller; anywhere
   when empty), the API only from the frontend (plus

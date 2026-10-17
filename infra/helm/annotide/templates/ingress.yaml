@@ -1,4 +1,5 @@
 {{- if .Values.ingress.enabled }}
+{{- $hosts := include "ap.ingressHosts" . | fromJsonArray }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -25,12 +26,12 @@ spec:
   tls:
     - secretName: {{ include "ap.fullname" . }}-tls
       hosts:
-        {{- range .Values.ingress.hosts }}
+        {{- range $hosts }}
         - {{ .host | quote }}
         {{- end }}
   {{- end }}
   rules:
-    {{- range .Values.ingress.hosts }}
+    {{- range $hosts }}
     # Everything goes to the frontend, whose nginx proxies /api/ to the API:
     # one origin, so no CORS and the CSP stays 'self'.
     - host: {{ .host | quote }}
