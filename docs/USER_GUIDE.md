@@ -93,7 +93,8 @@ come by e-mail; turn that off on your **Security** page.
 4. **Workflow.** Review on or off, consensus (several annotators per item),
    gold items for accuracy checks, priorities and deadlines.
 5. **Items.** **Scan** the source, upload files from the browser, or import
-   existing annotations (COCO, YOLO, VOC, CVAT, Label Studio).
+   existing annotations (COCO, YOLO, VOC, CVAT, Label Studio). Coming from
+   Azure Machine Learning data labeling: [MIGRATE_AZURE_ML.md](MIGRATE_AZURE_ML.md).
 6. **Pre-labelling.** Run a registered model over new items. Its suggestions
    arrive as drafts that people correct, and they never replace human work.
 7. **Members.** Add people with a role, optionally limited to folders.

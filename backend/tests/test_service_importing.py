@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import json
 import uuid
 import zipfile
 from pathlib import Path
@@ -13,7 +14,8 @@ import pytest
 
 from app.connectors.local import LocalConnector
 from app.demo import DEMO_SCHEMA
-from app.importers import ImportedItem, ImportFormatError
+from app.importers import ImportedItem, ImportFile, ImportFormatError
+from app.importers.coco import CocoImporter
 from app.models import Item, MediaType
 from app.schemas import LabelSchemaDefinition
 from app.services import importing
@@ -95,6 +97,40 @@ class TestConvertItem:
         assert dumped[0]["bbox"] == [50.0, 50.0, 100.0, 100.0]
         assert dumped[1]["points"] == [[0.0, 0.0], [100.0, 0.0], [100.0, 50.0]]
         assert dumped[2]["point"] == [20.0, 10.0]
+
+    def test_azure_ml_coco_export_lands_in_pixels(self) -> None:
+        # Microsoft's documented example: a 30 x 60 box at (10, 10) in a
+        # 640 x 480 image is exported as (0.015625, 0.02083, 0.046875, 0.125).
+        document = {
+            "images": [
+                {
+                    "id": 1,
+                    "file_name": "azureml://datastores/workspaceblobstore/paths/street/a.png",
+                    "width": 0,
+                    "height": 0,
+                }
+            ],
+            "categories": [{"id": 1, "name": "car"}],
+            "annotations": [
+                {
+                    "id": 1,
+                    "image_id": 1,
+                    "category_id": 1,
+                    "bbox": [0.015625, 0.02083, 0.046875, 0.125],
+                }
+            ],
+        }
+        (imported,) = CocoImporter().parse(
+            [ImportFile(path="coco.json", data=json.dumps(document).encode())]
+        )
+        item = _item("street/a.png", 640, 480)
+        assert ItemIndex.build([_item("other/a.png"), item]).resolve(imported.path) is item
+
+        converted = convert_item(imported, item, DEFINITION, {}, schema_version=1)
+
+        assert converted.result is not None
+        bbox = converted.result.shapes[0].model_dump(mode="json", by_alias=True)["bbox"]
+        assert bbox == pytest.approx([10.0, 10.0, 40.0, 70.0], abs=0.01)
 
     def test_normalised_coordinates_fall_back_to_the_source_dimensions(self) -> None:
         imported = ImportedItem(
