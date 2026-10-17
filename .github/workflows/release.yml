@@ -185,7 +185,8 @@ jobs:
         run: |
           v="${{ needs.version.outputs.version }}"
           yq -i ".version = \"$v\" | .appVersion = \"$v\"" Chart.yaml
-          yq -i "(.annotations.\"artifacthub.io/images\" | from_yaml | .[].image |= sub(\":.*\$\"; \":$v\")) as \$images | .annotations.\"artifacthub.io/images\" = (\$images | to_yaml)" Chart.yaml
+          # Only our own images take the release tag; postgres and valkey keep theirs.
+          yq -i "(.annotations.\"artifacthub.io/images\" | from_yaml | (.[] | select(.image | test(\"^ghcr.io/annotide/\")) | .image) |= sub(\":.*\$\"; \":$v\")) as \$images | .annotations.\"artifacthub.io/images\" = (\$images | to_yaml)" Chart.yaml
 
       - name: helm lint
         working-directory: infra/helm
