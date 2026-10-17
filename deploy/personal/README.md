@@ -198,3 +198,17 @@ cd .. && rm -rf annotide
 
 `docker compose down` (without `-v`) stops everything but keeps the named
 volumes, so `docker compose up -d` later picks up where you left off.
+
+### Reinstalling
+
+The database lives in the Docker volume `annotide_postgres_data`, not in
+`~/annotide`, and every install directory shares that name. It only accepts
+the database password in the `.env` that created it, so `install.sh` stops
+before starting anything when it finds the volume but no `.env` (the
+directory was removed without `docker compose down -v`, or you are
+installing into a new directory). Either copy the earlier install's `.env`
+into the install directory to keep the old data, or delete the old database
+with the command the installer prints (`docker volume rm
+annotide_postgres_data`, after removing the old containers if they still
+exist). Deleting the volume cannot be undone; the installer never does it
+for you.

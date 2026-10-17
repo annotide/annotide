@@ -69,6 +69,57 @@ fetch_compose_file() {
     fi
 }
 
+# Stops the install when there is no .env but the Postgres volume of an
+# earlier install with the same Compose project name is still there (its
+# directory removed without `docker compose down -v`, or a second install
+# directory: compose.yaml sets `name: annotide`, so every directory shares
+# it). Postgres only applies POSTGRES_PASSWORD to an empty volume, so a new
+# .env would never match the old database and the backend would crash-loop
+# on "password authentication failed". Never deletes anything itself.
+check_leftover_database() {
+    dir="$1"
+    # Compose resolves the name exactly as `up` will (COMPOSE_PROJECT_NAME,
+    # then compose.yaml's `name:`, then the directory). --no-interpolate:
+    # the required ${VAR:?} values do not exist yet.
+    project=$(cd "$dir" && docker compose config --no-interpolate 2>/dev/null \
+        | sed -n 's/^name:[[:space:]]*//p' | head -n 1) || project=""
+    [ -n "$project" ] || return 0
+    volume="${project}_postgres_data"
+    docker volume inspect "$volume" >/dev/null 2>&1 || return 0
+
+    # `docker volume rm` refuses a volume that a container, even a stopped
+    # one, still uses: name the old containers too.
+    containers=$(docker ps -a --filter "label=com.docker.compose.project=$project" \
+        --format '{{.Names}}' 2>/dev/null | tr '\n' ' ' | sed 's/ *$//') || containers=""
+    if [ -n "$containers" ]; then
+        remove_cmd="docker rm -f $containers && docker volume rm $volume"
+    else
+        remove_cmd="docker volume rm $volume"
+    fi
+
+    err "An earlier Annotide install left its database behind, but $dir has no .env."
+    cat >&2 <<EOF
+
+The Docker volume $volume still holds that install's database, which
+only accepts the database password from that install's .env. With a newly
+generated .env the backend could not sign in to it, so nothing has been
+started. Choose one:
+
+  1. Keep the old data: copy the earlier install's .env to
+     $dir/.env, then run this script again.
+
+  2. Start over: delete the old database, then run this script again:
+
+       $remove_cmd
+
+     This permanently deletes the old database (every user, project and
+     annotation in it) and cannot be undone. Back it up first if you might
+     need it: https://annotide.com/docs/backup/
+
+EOF
+    exit 1
+}
+
 # Writes .env with generated secrets, but only the first time: an existing
 # .env is never touched, so re-running this script is idempotent and never
 # rotates a running install's secret key or database password.
@@ -79,6 +130,8 @@ write_env_file() {
         log "Found an existing .env, leaving it as-is."
         return 0
     fi
+
+    check_leftover_database "$dir"
 
     port="${ANNOTIDE_PORT:-8080}"
     secret_key=$(random_hex 32)
