@@ -379,3 +379,101 @@ def test_round_trip_through_exporter() -> None:
     mask_shape = next(s for s in shapes if s["type"] == "mask")
     assert mask_shape["class"] == "car"
     assert mask_shape["rle"] == {"size": [10, 10], "counts": [10, 5, 85]}
+
+
+# ---------------------------------------------------------------------------
+# Azure Machine Learning data labeling exports
+# ---------------------------------------------------------------------------
+
+
+def _azure_ml_payload(file_name: str, annotation: dict) -> dict:
+    """An export as Azure ML data labeling writes it: width and height 0, values in [0, 1]."""
+    return {
+        "images": [{"id": 1, "file_name": file_name, "width": 0, "height": 0}],
+        "categories": [{"id": 1, "name": "car"}],
+        "annotations": [{"id": 1, "image_id": 1, "category_id": 1, **annotation}],
+    }
+
+
+def test_azure_ml_bbox_export_is_normalised() -> None:
+    payload = _azure_ml_payload(
+        "azureml://subscriptions/s/resourcegroups/rg/workspaces/ws/datastores/"
+        "workspaceblobstore/paths/UI/2026-01-27/street/car1.jpg",
+        {"bbox": [0.015625, 0.02083, 0.046875, 0.125]},
+    )
+
+    (item,) = CocoImporter().parse([_coco_bytes(payload)])
+
+    assert item.path == "UI/2026-01-27/street/car1.jpg"
+    assert item.coordinates == "normalized"
+    assert item.width is None
+    assert item.height is None
+    assert item.shapes[0]["bbox"] == pytest.approx([0.015625, 0.02083, 0.0625, 0.14583])
+
+
+def test_azure_ml_polygon_export_is_normalised() -> None:
+    payload = _azure_ml_payload(
+        "AmlDatastore://workspaceblobstore/street/car1.jpg",
+        {
+            "bbox": [0.1, 0.1, 0.4, 0.4],
+            "segmentation": [[0.1, 0.1, 0.5, 0.1, 0.5, 0.5, 0.1, 0.5]],
+        },
+    )
+
+    (item,) = CocoImporter().parse([_coco_bytes(payload)])
+
+    assert item.path == "street/car1.jpg"
+    assert item.coordinates == "normalized"
+    assert item.shapes[0]["points"] == [[0.1, 0.1], [0.5, 0.1], [0.5, 0.5], [0.1, 0.5]]
+
+
+@pytest.mark.parametrize(
+    ("file_name", "path"),
+    [
+        ("azureml://datastores/images/paths/a/b%20c.jpg", "a/b c.jpg"),
+        ("https://acct.blob.core.windows.net/media/a/b.jpg?sv=2024&sig=x", "a/b.jpg"),
+        ("https://cdn.example.com/static/a/b.jpg", "static/a/b.jpg"),
+        ("images/car1.jpg", "images/car1.jpg"),
+        ("C:\\data\\car1.jpg", "C:\\data\\car1.jpg"),
+    ],
+)
+def test_uri_file_names_name_their_path(file_name: str, path: str) -> None:
+    payload = _base_payload()
+    payload["images"][0]["file_name"] = file_name
+
+    (item,) = CocoImporter().parse([_coco_bytes(payload)])
+
+    assert item.path == path
+
+
+@pytest.mark.parametrize(
+    "image",
+    [
+        # Dimensions given: the usual pixel COCO, even with tiny values.
+        {"id": 1, "file_name": "a.jpg", "width": 640, "height": 480},
+        # No dimensions, but a value outside [0, 1].
+        {"id": 1, "file_name": "a.jpg"},
+    ],
+)
+def test_pixel_coco_is_not_mistaken_for_normalised(image: dict) -> None:
+    bbox = [0.5, 0.5, 0.25, 0.25] if image.get("width") else [10.0, 20.0, 30.0, 40.0]
+    payload = {
+        "images": [image],
+        "categories": [{"id": 1, "name": "car"}],
+        "annotations": [{"id": 1, "image_id": 1, "category_id": 1, "bbox": bbox}],
+    }
+
+    (item,) = CocoImporter().parse([_coco_bytes(payload)])
+
+    assert item.coordinates == "pixel"
+
+
+def test_mask_without_dimensions_stays_pixel() -> None:
+    payload = _azure_ml_payload(
+        "a.jpg", {"bbox": [0, 0, 1, 1], "segmentation": {"size": [2, 2], "counts": [0, 4]}}
+    )
+
+    (item,) = CocoImporter().parse([_coco_bytes(payload)])
+
+    assert item.coordinates == "pixel"
+    assert item.shapes[0]["type"] == "mask"
