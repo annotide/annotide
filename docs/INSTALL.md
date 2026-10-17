@@ -12,6 +12,7 @@ you register.
 | Quick install (Docker Compose, published images) | One person or a small team, your own machine or a single server | §2 below |
 | Docker Compose from source | Evaluation, demos, development | [README → Quick start](../README.md#development-quick-start) |
 | Kubernetes with the Helm chart | Production on any cloud or on premises | [Helm chart README](../infra/helm/annotide/README.md) |
+| Kubernetes with the Helm chart and the in-cluster database (the Azure Marketplace default) | Evaluations, pilots and small teams that run their own backups. [Read the risks](../infra/helm/annotide/README.md#risks-of-running-the-database-in-the-cluster) first | [Helm chart README → In-cluster PostgreSQL and Valkey](../infra/helm/annotide/README.md#in-cluster-postgresql-and-valkey) |
 | Azure: Terraform, then the Helm chart | Production on Azure, private networking (SEC-1) | [Terraform README](../infra/terraform/azure/README.md) |
 | AWS: Terraform, then the Helm chart | Production on AWS (EKS, RDS, ElastiCache, S3) | [Terraform README](../infra/terraform/aws/README.md) |
 | Google Cloud: Terraform, then the Helm chart | Production on Google Cloud (GKE, Cloud SQL, Memorystore, Cloud Storage) | [Terraform README](../infra/terraform/gcp/README.md) |
@@ -151,6 +152,9 @@ connector a reference (`azurekeyvault://…`, `awssecrets://…`,
 
 - TLS end to end: the ingress, `rediss://`, and PostgreSQL with
   `sslmode`/`ssl=require`.
+  The chart's in-cluster PostgreSQL and Valkey have no TLS: turn on
+  `networkPolicy.enabled`, or use managed services where policy requires
+  encryption in transit.
 - `APP_SECRET_KEY`: 32+ random bytes, kept in your secret store. Rotating it
   signs everyone out, invalidates API keys and MFA enrolments (see
   [OPERATIONS.md](OPERATIONS.md)).
