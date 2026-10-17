@@ -17,3 +17,14 @@ Create the first administrator:
 
 Check the installation:
   helm test {{ .Release.Name }} -n {{ .Release.Namespace }}
+{{- if .Values.postgresql.enabled }}
+
+WARNING: PostgreSQL runs in the cluster ({{ include "ap.postgresqlName" . }}-0).
+  - Nothing backs it up. Schedule pg_dump or volume snapshots to storage
+    outside the cluster: https://annotide.com/docs/backup/
+  - Deleting the cluster{{ if not .Values.postgresql.persistence.azureDisk.enabled }}, the namespace or the PVC{{ end }} deletes the data.
+  - One pod, no failover: node failures and upgrades mean minutes of downtime.
+  - Keep the {{ include "ap.postgresqlName" . }} Secret with your backups.
+  All risks: https://annotide.com/docs/helm/#risks-of-running-the-database-in-the-cluster
+  For production, use a managed PostgreSQL via database.url.
+{{- end }}

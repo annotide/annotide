@@ -41,7 +41,7 @@ metadata:
     {{- include "ap.labels" (dict "ctx" . "component" "worker") | nindent 4 }}
 type: Opaque
 stringData:
-  {{ $as.postgresConnectionKey }}: {{ default (replace "postgresql+asyncpg://" "postgresql://" (required "database.url is required" .Values.database.url)) $as.postgresConnection | quote }}
+  {{ $as.postgresConnectionKey }}: {{ default (replace "postgresql+asyncpg://" "postgresql://" (include "ap.databaseUrl" .)) $as.postgresConnection | quote }}
 {{- end }}
 ---
 apiVersion: keda.sh/v1alpha1

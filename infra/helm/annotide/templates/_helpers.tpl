@@ -87,10 +87,79 @@ cannot verify a named USER. Call with (dict "ctx" $ "uid" 1000). */}}
 {{- toYaml .Values.containerSecurityContext }}
 {{- end -}}
 
+{{/* A third-party image (in-cluster PostgreSQL / Valkey); call with its values map. */}}
+{{- define "ap.thirdPartyImage" -}}
+{{- if .registry -}}
+{{- printf "%s/%s:%s" .registry .repository .tag -}}
+{{- else -}}
+{{- printf "%s:%s" .repository .tag -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "ap.postgresqlName" -}}
+{{- printf "%s-postgresql" (include "ap.fullname" .) -}}
+{{- end -}}
+
+{{- define "ap.valkeyName" -}}
+{{- printf "%s-valkey" (include "ap.fullname" .) -}}
+{{- end -}}
+
+{{/* Password of an in-cluster service: the value given, else the live
+Secret's (so upgrades keep it), else a new random one. Remembered in the
+values map so every template in one render sees the same password. `helm
+template` cannot read the live Secret: set the password there. Call with
+(dict "ctx" $ "values" .Values.postgresql "secret" "<name>"). */}}
+{{- define "ap.inClusterPassword" -}}
+{{- if not (hasKey .values "_password") -}}
+{{- $live := lookup "v1" "Secret" .ctx.Release.Namespace .secret | default dict -}}
+{{- $kept := dig "data" "password" "" $live | b64dec -}}
+{{- $_ := set .values "_password" (.values.password | default $kept | default (randAlphaNum 32)) -}}
+{{- end -}}
+{{- .values._password -}}
+{{- end -}}
+
+{{- define "ap.postgresqlPassword" -}}
+{{- include "ap.inClusterPassword" (dict "ctx" . "values" .Values.postgresql "secret" (include "ap.postgresqlName" .)) -}}
+{{- end -}}
+
+{{- define "ap.valkeyPassword" -}}
+{{- include "ap.inClusterPassword" (dict "ctx" . "values" .Values.valkey "secret" (include "ap.valkeyName" .)) -}}
+{{- end -}}
+
+{{/* libpq URL of the in-cluster PostgreSQL; the app adds `+asyncpg`. */}}
+{{- define "ap.postgresqlUrl" -}}
+{{- $pg := .Values.postgresql -}}
+{{- printf "postgresql://%s:%s@%s:5432/%s" (urlquery $pg.username) (urlquery (include "ap.postgresqlPassword" .)) (include "ap.postgresqlName" .) $pg.database -}}
+{{- end -}}
+
+{{/* APP_DATABASE_URL and APP_REDIS_URL: the in-cluster services when on,
+else the external URLs. */}}
+{{- define "ap.databaseUrl" -}}
+{{- if .Values.postgresql.enabled -}}
+{{- if .Values.database.url -}}
+{{- fail "set either database.url or postgresql.enabled, not both" -}}
+{{- end -}}
+{{- replace "postgresql://" "postgresql+asyncpg://" (include "ap.postgresqlUrl" .) -}}
+{{- else -}}
+{{- required "database.url is required (or set postgresql.enabled or secrets.existingSecret)" .Values.database.url -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "ap.redisUrl" -}}
+{{- if .Values.valkey.enabled -}}
+{{- if .Values.redis.url -}}
+{{- fail "set either redis.url or valkey.enabled, not both" -}}
+{{- end -}}
+{{- printf "redis://:%s@%s:6379/0" (urlquery (include "ap.valkeyPassword" .)) (include "ap.valkeyName" .) -}}
+{{- else -}}
+{{- required "redis.url is required (or set valkey.enabled or secrets.existingSecret)" .Values.redis.url -}}
+{{- end -}}
+{{- end -}}
+
 {{/* Secret keys the chart creates when no existingSecret is given. */}}
 {{- define "ap.secretData" -}}
-APP_DATABASE_URL: {{ required "database.url is required (or set secrets.existingSecret)" .Values.database.url | quote }}
-APP_REDIS_URL: {{ required "redis.url is required (or set secrets.existingSecret)" .Values.redis.url | quote }}
+APP_DATABASE_URL: {{ include "ap.databaseUrl" . | quote }}
+APP_REDIS_URL: {{ include "ap.redisUrl" . | quote }}
 APP_SECRET_KEY: {{ required "secrets.secretKey is required (or set secrets.existingSecret)" .Values.secrets.secretKey | quote }}
 {{- with .Values.secrets.secretKeyPrevious }}
 APP_SECRET_KEY_PREVIOUS: {{ . | quote }}

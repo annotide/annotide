@@ -76,6 +76,57 @@ spec:
               {{- include "ap.selectorLabels" (dict "ctx" $ "component" $component) | nindent 14 }}
         {{- end }}
 {{- end }}
+{{- if .Values.postgresql.enabled }}
+---
+# The in-cluster PostgreSQL: from the API, worker and migration Job, plus any extra peers.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "ap.postgresqlName" . }}
+  labels:
+    {{- include "ap.labels" (dict "ctx" . "component" "postgresql") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "ap.selectorLabels" (dict "ctx" . "component" "postgresql") | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - { protocol: TCP, port: 5432 }
+      from:
+        {{- range $component := list "backend" "worker" "migrations" }}
+        - podSelector:
+            matchLabels:
+              {{- include "ap.selectorLabels" (dict "ctx" $ "component" $component) | nindent 14 }}
+        {{- end }}
+        {{- with .Values.networkPolicy.postgresqlExtraFrom }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+{{- end }}
+{{- if .Values.valkey.enabled }}
+---
+# The in-cluster Valkey: from the API (enqueue, rate limits) and the worker.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "ap.valkeyName" . }}
+  labels:
+    {{- include "ap.labels" (dict "ctx" . "component" "valkey") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "ap.selectorLabels" (dict "ctx" . "component" "valkey") | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - { protocol: TCP, port: 6379 }
+      from:
+        {{- range $component := list "backend" "worker" }}
+        - podSelector:
+            matchLabels:
+              {{- include "ap.selectorLabels" (dict "ctx" $ "component" $component) | nindent 14 }}
+        {{- end }}
+{{- end }}
 {{- range $component := list "worker" "migrations" }}
 ---
 # The {{ $component }} serves nothing: no ingress at all.
