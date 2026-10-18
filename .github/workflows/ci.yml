@@ -495,7 +495,12 @@ jobs:
         with:
           context: ./backend
           push: false
-          tags: annotide-backend:ci
+          # load: also into the runner's Docker, under the name compose.yaml
+          # uses, for the Personal install test below.
+          load: true
+          tags: |
+            annotide-backend:ci
+            annotide-personal-test/annotide-backend:ci
           cache-from: type=gha,scope=backend
           cache-to: type=gha,mode=max,scope=backend
 
@@ -504,9 +509,21 @@ jobs:
         with:
           context: ./frontend
           push: false
-          tags: annotide-frontend:ci
+          load: true
+          tags: |
+            annotide-frontend:ci
+            annotide-personal-test/annotide-frontend:ci
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
+
+      # install.sh end to end on the images just built: an install, a
+      # reinstall over its leftover database (which must stop), then both
+      # ways out of it. The guard alone runs in `personal-install`.
+      - name: Personal install reinstall test
+        env:
+          ANNOTIDE_REGISTRY: annotide-personal-test
+          ANNOTIDE_VERSION: ci
+        run: sh deploy/personal/tests/e2e.sh reinstall
 
       # Images are only pushed on a version tag (v*), and only once a
       # registry + credentials are actually configured for this repo.
@@ -532,9 +549,9 @@ jobs:
       #
       # (repeat for the frontend image; the worker runs the backend image)
 
-  # Personal install (deploy/personal/): lint install.sh and sanity-check
-  # the Compose file it downloads. The build-and-publish pipeline is
-  # .github/workflows/release.yml.
+  # Personal install (deploy/personal/): lint install.sh, sanity-check
+  # the Compose file it downloads and test the reinstall guard. The
+  # build-and-publish pipeline is .github/workflows/release.yml.
   personal-install:
     name: personal install
     runs-on: ubuntu-latest
@@ -545,7 +562,7 @@ jobs:
       - name: shellcheck install.sh
         run: >-
           docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:stable
-          deploy/personal/install.sh
+          deploy/personal/install.sh deploy/personal/tests/e2e.sh
 
       - name: docker compose config
         working-directory: deploy/personal
@@ -556,3 +573,9 @@ jobs:
           APP_SECRET_KEY: ci-placeholder
           APP_INSTALL_ID: ci-placeholder
         run: docker compose -f compose.yaml config -q
+
+      # A database volume left by an earlier install must stop install.sh
+      # before anything starts (deploy/personal/tests/e2e.sh). Postgres only;
+      # the full reinstall runs in `docker`, on the images it builds.
+      - name: install.sh leftover-database guard
+        run: sh deploy/personal/tests/e2e.sh guard
