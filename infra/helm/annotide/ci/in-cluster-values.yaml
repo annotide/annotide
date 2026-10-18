@@ -1,0 +1,21 @@
+# In-cluster PostgreSQL and Valkey (the Azure Marketplace default), for
+# `helm lint` / kubeconform in CI.
+publicUrl: https://annotate.example.com
+secrets:
+  secretKey: ci-only-not-a-real-key-0123456789abcdef
+postgresql:
+  enabled: true
+  persistence:
+    azureDisk:
+      enabled: true
+      skuName: StandardSSD_ZRS
+valkey:
+  enabled: true
+worker:
+  autoscaling:
+    enabled: true
+networkPolicy:
+  enabled: true
+  postgresqlExtraFrom:
+    - namespaceSelector:
+        matchLabels: { kubernetes.io/metadata.name: keda }

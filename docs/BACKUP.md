@@ -24,6 +24,22 @@ restore (7–35 days) and geo-redundant backup where data residency allows.
 That is the backup. Add a weekly logical dump (below) to independent storage
 if the provider's backups must not be the only copy.
 
+**In-cluster PostgreSQL (Helm `postgresql.enabled`, the Azure Marketplace
+default).** Nothing backs it up for you. Run the logical dump below from
+the pod on a schedule and copy it off the cluster, or snapshot its volume
+(Azure Backup for AKS, Velero):
+
+```sh
+kubectl -n annotate exec annotate-annotide-postgresql-0 -- \
+  pg_dump -U annotation -d annotation -Fc > annotation-$(date +%F).dump
+```
+
+The data volume outlives `helm uninstall` (the PVC is not part of the
+release) and, with `postgresql.persistence.azureDisk`, a deleted namespace
+too (`reclaimPolicy: Retain`); it does not outlive the AKS cluster. The
+`<release>-postgresql` Secret holds the password the data directory was
+initialised with: keep it with the dump.
+
 **Logical dump (compose, or anywhere `pg_dump` reaches the database).**
 
 ```sh
