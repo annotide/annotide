@@ -298,7 +298,9 @@ print_summary() {
 
 Annotide is running: http://localhost:$port
 
-Upgrade:    cd $dir && docker compose pull && docker compose up -d
+Upgrade:    back up first (https://annotide.com/docs/backup/), then
+            cd $dir && curl -fsSL https://annotide.com/install/compose.yaml -o compose.yaml \\
+              && docker compose pull && docker compose up -d
 Logs:       cd $dir && docker compose logs -f
 Stop:       cd $dir && docker compose down
 Uninstall:  cd $dir && docker compose down -v   (this also deletes the database!)

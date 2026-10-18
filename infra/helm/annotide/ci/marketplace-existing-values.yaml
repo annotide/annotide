@@ -18,3 +18,5 @@ database:
   url: postgresql+asyncpg://annotation:pw@db.postgres.database.azure.com:5432/annotation?ssl=require
 redis:
   url: rediss://:pw@cache.westeurope.redis.azure.net:10000/0
+networkPolicy:
+  enabled: true
