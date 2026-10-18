@@ -841,6 +841,18 @@ item and writes one new annotation version per matched item. Payload:
 - Items are matched by the path the source names, in order: exact `item.path`,
   then unique basename, then unique stem (YOLO label files carry only the
   stem). A record with no match counts as `unmatched` and is skipped.
+- COCO `file_name` values that are URIs name the path inside them: Azure
+  Machine Learning datastore URIs (`azureml://…/datastores/<name>/paths/<path>`,
+  `AmlDatastore://<name>/<path>`) give `<path>`, Azure Blob URLs
+  (`https://<account>.blob.core.windows.net/<container>/<path>`) give `<path>`
+  without the container, other `http(s)` URLs their path; all percent-decoded,
+  without query strings.
+- COCO exported by Azure Machine Learning data labeling (retired
+  2026-09-30) writes `bbox` and polygon coordinates normalised to `[0, 1]`
+  and `0` for every image's `width` / `height`. An image whose dimensions
+  are missing or `0` and whose every bbox and polygon coordinate lies in
+  `[0, 1]` is read as normalised (converted as below, so the item needs
+  stored dimensions); images with dimensions, masks or keypoints stay pixels.
 - Class names go through `class_mapping` (`{source_name: schema_class}`,
   identity by default); a shape whose class is not in the label schema is
   dropped and counted in `dropped_shapes`.

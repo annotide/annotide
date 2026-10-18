@@ -8,11 +8,72 @@ into :class:`ImportedItem` records. This is the inverse of
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Iterable, Iterator
 from typing import Any, ClassVar
+from urllib.parse import unquote, urlsplit
 
-from app.importers.base import ImportedItem, ImportFile, ImportFormatError, register_importer
+from app.importers.base import (
+    Coordinates,
+    ImportedItem,
+    ImportFile,
+    ImportFormatError,
+    register_importer,
+)
 from app.importers.rle import decode_coco_compressed
+
+# Azure Machine Learning datastore URIs, long and short form, and the legacy one.
+_AZUREML_URI = re.compile(r"^azureml://(?:[^?#]*/)?datastores/[^/]+/paths/(?P<path>[^?#]+)", re.I)
+_AML_DATASTORE_URI = re.compile(r"^amldatastore://[^/]+/(?P<path>[^?#]+)", re.I)
+# Normalised values a hair over 1 (float rounding in the exporter) still count.
+_NORMALISED_MAX = 1.001
+
+
+def _source_path(file_name: str) -> str:
+    """The path a COCO `file_name` names, so it matches `item.path` exactly.
+
+    Azure Machine Learning data labeling writes datastore URIs; other tools
+    write Blob or plain URLs. Anything else is returned as it is.
+    """
+    for pattern in (_AZUREML_URI, _AML_DATASTORE_URI):
+        match = pattern.match(file_name)
+        if match:
+            return unquote(match["path"]).lstrip("/")
+    parsed = urlsplit(file_name)
+    if parsed.scheme.lower() in ("http", "https") and parsed.netloc:
+        path = unquote(parsed.path).lstrip("/")
+        if parsed.netloc.lower().endswith(".blob.core.windows.net"):
+            # The first segment is the container, which the connector already names.
+            path = path.partition("/")[2] or path
+        return path
+    return file_name
+
+
+def _image_coordinates(image: dict[str, Any], annotations: list[dict[str, Any]]) -> Coordinates:
+    """`normalized` for Azure Machine Learning data labeling's COCO export.
+
+    It writes bbox and polygon values as fractions of the image and `0` for
+    every image's width and height. Any image with dimensions, a mask or
+    keypoints, or a value outside `[0, 1]`, is the usual pixel COCO.
+    """
+    if image.get("width") or image.get("height"):
+        return "pixel"
+    values: list[Any] = []
+    for annotation in annotations:
+        segmentation = annotation.get("segmentation")
+        if isinstance(segmentation, dict) or annotation.get("keypoints"):
+            return "pixel"
+        bbox = annotation.get("bbox")
+        if isinstance(bbox, list):
+            values.extend(bbox)
+        if isinstance(segmentation, list):
+            for ring in segmentation:
+                if isinstance(ring, list):
+                    values.extend(ring)
+    numbers = [v for v in values if isinstance(v, int | float) and not isinstance(v, bool)]
+    if numbers and len(numbers) == len(values) and all(0 <= v <= _NORMALISED_MAX for v in numbers):
+        return "normalized"
+    return "pixel"
 
 
 def _iter_coco_documents(files: Iterable[ImportFile]) -> Iterator[dict[str, Any]]:
@@ -233,7 +294,8 @@ class CocoImporter:
                 warnings: list[str] = []
                 shapes: list[dict[str, Any]] = []
 
-                for annotation in annotations_by_image.get(image_id, []):
+                image_annotations = annotations_by_image.get(image_id, [])
+                for annotation in image_annotations:
                     category_id = annotation.get("category_id")
                     if category_id is None or int(category_id) not in category_names:
                         raise ImportFormatError(
@@ -251,10 +313,10 @@ class CocoImporter:
                     )
 
                 yield ImportedItem(
-                    path=str(image["file_name"]),
+                    path=_source_path(str(image["file_name"])),
                     width=int(width) if width else None,
                     height=int(height) if height else None,
-                    coordinates="pixel",
+                    coordinates=_image_coordinates(image, image_annotations),
                     shapes=shapes,
                     warnings=warnings,
                 )
