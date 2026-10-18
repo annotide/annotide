@@ -22,6 +22,15 @@ image:
     tag: ""
 imagePullSecrets: []
 
+# -- Azure Marketplace only: the bundle lists every image here, by key
+# (backend, frontend, model, modelSam2, postgresql, valkey), as
+# `{registry, image, tag | digest}`, and Microsoft rewrites them to its own
+# registry. A key set here wins over `image.*` / `<component>.image`
+# (infra/marketplace/). Leave empty otherwise.
+global:
+  azure:
+    images: {}
+
 nameOverride: ""
 fullnameOverride: ""
 
@@ -117,6 +126,12 @@ secrets:
   # `python -m app.cli reseal-secrets` in a backend pod, wait an hour
   # (APP_ACCESS_TOKEN_TTL), then clear secretKeyPrevious.
   secretKey: ""
+  # With secretKey empty: generate one on the first install and keep it in
+  # the <release>-secret-key Secret, which `helm uninstall` leaves behind
+  # (the key seals MFA and webhook secrets in the database). For installs
+  # with no one to supply a key, such as the Azure Marketplace; not with
+  # `helm template`, which cannot read the live Secret.
+  generateSecretKey: false
   secretKeyPrevious: ""
   oidcClientSecret: ""
   # SMTP password for notification e-mail (API-7), with smtp.username.
@@ -325,6 +340,9 @@ ingress:
   clusterIssuer: ""
   hosts:
     - host: annotate.example.com
+  # One host as a plain string; replaces `hosts` when set (for tools that
+  # cannot set list entries, such as Azure cluster extension settings).
+  host: ""
   tls: []
   #  - secretName: annotate-tls
   #    hosts: [annotate.example.com]

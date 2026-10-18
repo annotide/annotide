@@ -44,3 +44,6 @@ data/
 
 # SAM2 weights fetched for a local model-service run (model-service/tools/fetch_sam2.py)
 .models/
+
+# Azure Marketplace bundle source, assembled by infra/marketplace/build.sh
+infra/marketplace/build/

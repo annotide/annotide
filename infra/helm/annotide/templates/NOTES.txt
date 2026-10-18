@@ -17,7 +17,7 @@ Create the first administrator:
 
 Check the installation:
   helm test {{ .Release.Name }} -n {{ .Release.Namespace }}
-{{- if .Values.postgresql.enabled }}
+{{- if include "ap.postgresqlOn" . }}
 
 WARNING: PostgreSQL runs in the cluster ({{ include "ap.postgresqlName" . }}-0).
   - Nothing backs it up. Schedule pg_dump or volume snapshots to storage

@@ -1,4 +1,4 @@
-{{- if .Values.postgresql.enabled }}
+{{- if include "ap.postgresqlOn" . }}
 {{- if and .Values.secrets.existingSecret (not .Values.postgresql.password) }}
 {{- fail "postgresql.password is required with secrets.existingSecret: that Secret's APP_DATABASE_URL must use it" }}
 {{- end }}
@@ -85,7 +85,7 @@ spec:
       terminationGracePeriodSeconds: 60
       containers:
         - name: postgresql
-          image: {{ include "ap.thirdPartyImage" $pg.image }}
+          image: {{ include "ap.image" (dict "ctx" . "key" "postgresql" "image" $pg.image) }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - { name: POSTGRES_DB, value: {{ $pg.database | quote }} }

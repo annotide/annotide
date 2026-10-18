@@ -377,6 +377,29 @@ jobs:
           docker run --rm -v "$PWD/tests":/r -w /r --entrypoint promtool prom/prometheus:v3.15.0 \
             test rules alerts.test.yaml
 
+  # The Azure Marketplace bundle (infra/marketplace/): the chart with the
+  # bundle's values, the ARM template and the install form, checked by
+  # Microsoft's own container-package-app, as certification does.
+  marketplace:
+    name: marketplace bundle
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # yq v4 is preinstalled on the ubuntu runners.
+      - name: Assemble the bundle
+        run: infra/marketplace/build.sh 0.0.0
+
+      - name: cpa verify
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD/infra/marketplace/build:/data" -w /data \
+            --entrypoint /bin/bash mcr.microsoft.com/container-package-app:latest \
+            -c "cpa verify --telemetryOptOut"
+
   # Terraform for Azure, AWS and Google Cloud (§15, SEC-1) and the Entra app
   # registration: format, validate (no backend, nothing applied) and a Trivy
   # misconfiguration scan.

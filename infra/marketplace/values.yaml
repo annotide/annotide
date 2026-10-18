@@ -1,0 +1,41 @@
+# Merged over the chart's values.yaml in the Marketplace bundle (build.sh).
+# The install form (createUIDefinition.json -> mainTemplate.json) adds the
+# per-install settings on top: database mode, licence key, public address.
+
+# Every image the chart can run, so Microsoft can copy them into its
+# registry. build.sh sets the annotide-* tags to the release version.
+global:
+  azure:
+    images:
+      backend:
+        registry: ghcr.io/annotide
+        image: annotide-backend
+        tag: "0.0.0"
+      frontend:
+        registry: ghcr.io/annotide
+        image: annotide-frontend
+        tag: "0.0.0"
+      postgresql:
+        registry: docker.io/library
+        image: postgres
+        tag: 16.15-alpine
+      valkey:
+        registry: docker.io/valkey
+        image: valkey
+        tag: 9.1.2-alpine
+
+# Nobody types a secret key into the portal: generate one and keep it.
+secrets:
+  generateSecretKey: true
+
+# The install form's default, "Deploy in the cluster" (the bundle must also
+# render with these values alone); "Use existing services" turns both off.
+# The disk is Azure Disk with reclaimPolicy Retain, so a deleted namespace
+# keeps the data.
+valkey:
+  enabled: true
+postgresql:
+  enabled: true
+  persistence:
+    azureDisk:
+      enabled: true

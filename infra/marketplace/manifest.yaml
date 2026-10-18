@@ -1,0 +1,15 @@
+# Azure Marketplace CNAB manifest (container-package-app). build.sh copies it
+# into build/ and sets `version` and `registryServer`; the Partner Center plan
+# `byol` registers the cluster extension type Annotide.Annotide.
+applicationName: com.annotide.annotide
+publisher: "Annotide"
+description: "Self-hosted data annotation for images, video, audio, text and PDF, on your own AKS cluster."
+version: 0.0.0 # set by build.sh, #.#.# (the release version)
+helmChart: "./annotide"
+clusterArmTemplate: "./mainTemplate.json" # spelled as in Microsoft's sample
+uiDefinition: "./createUIDefinition.json"
+registryServer: "set-by-build.azurecr.io"
+extensionRegistrationParameters:
+  # One installation per cluster, in its own namespace.
+  defaultScope: "cluster"
+  namespace: "annotide"
