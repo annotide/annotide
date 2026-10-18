@@ -171,13 +171,20 @@ compose file forwards the common `APP_OIDC_*` and `APP_SAML_*` settings
 
 ## Upgrade
 
+Back up the database first (see [Backup](#backup)): the backend migrates it
+to the new version on startup, and an older version cannot read it after
+that.
+
 ```sh
 cd ~/annotide
+curl -fsSL https://annotide.com/install/compose.yaml -o compose.yaml
 docker compose pull
 docker compose up -d
 ```
 
-Pin a version instead of always tracking `latest` by setting
+The first line fetches the current Compose file, so a release that adds a
+service or a setting is picked up too; `.env` and the database are never
+touched. Pin a version instead of always tracking `latest` by setting
 `ANNOTIDE_VERSION=X.Y.Z` in `.env`. Database migrations run automatically
 as part of the backend container's startup command.
 

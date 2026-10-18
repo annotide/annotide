@@ -25,3 +25,5 @@ ingress:
   className: webapprouting.kubernetes.azure.com
   host: annotate.example.com
   clusterIssuer: letsencrypt
+networkPolicy:
+  enabled: true

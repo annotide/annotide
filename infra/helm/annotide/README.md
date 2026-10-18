@@ -166,6 +166,13 @@ migration: the app would start on an empty database.
 - With `networkPolicy.enabled`, PostgreSQL accepts the API, worker and
   migration Job, plus `networkPolicy.postgresqlExtraFrom` (KEDA's operator
   for `worker.autoscaling`, a backup job); Valkey accepts the API and worker.
+  The Azure Marketplace bundle turns it on.
+- Keep the `<release>-annotide-postgresql` Secret as long as the volume.
+  PostgreSQL sets its password only when it first initialises the data
+  directory, so a Secret deleted by hand (while the PVC stays) makes the
+  next install or upgrade generate a new password the database rejects:
+  the API and worker fail with "password authentication failed". Restore
+  the Secret from a backup, or set `postgresql.password` to the original.
 
 ## Autoscaling (OPS-5)
 

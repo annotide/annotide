@@ -39,3 +39,10 @@ postgresql:
   persistence:
     azureDisk:
       enabled: true
+
+# Only Annotide's own pods may reach the in-cluster PostgreSQL and Valkey
+# (and the API only through the frontend). Enforced where the cluster has a
+# network policy engine (AKS: Azure NPM, Cilium or Calico); elsewhere the
+# policies are accepted and ignored.
+networkPolicy:
+  enabled: true

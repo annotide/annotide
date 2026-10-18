@@ -11,7 +11,7 @@ copies the bundle built here into its own public registry.
 | File | What it is |
 | ---- | ---------- |
 | `manifest.yaml` | The package manifest for `container-package-app` (cpa); `build.sh` sets `version` and `registryServer` |
-| `values.yaml` | Merged over the chart's values in the bundle: every image under `global.azure.images`, a generated secret key, in-cluster PostgreSQL and Valkey on a retained Azure Disk |
+| `values.yaml` | Merged over the chart's values in the bundle: every image under `global.azure.images`, a generated secret key, in-cluster PostgreSQL and Valkey on a retained Azure Disk, network policies on |
 | `mainTemplate.json` | The ARM template. It may only create `Microsoft.ContainerService/managedClusters` (optional new cluster) and the `Microsoft.KubernetesConfiguration/extensions` resource. The `DONOTMODIFY` variables are filled in by Marketplace |
 | `createUIDefinition.json` | The portal form: cluster, database, installation name, licence key, optional public hostname |
 | `build.sh` | Assembles `build/` (git-ignored): the chart, the merged values, the template, the form and the manifest |
