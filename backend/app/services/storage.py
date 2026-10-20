@@ -38,7 +38,8 @@ from app.services.secrets import resolve_secret
 READ_ONLY_CONNECTOR_TYPES = frozenset({ConnectorType.HTTP})
 
 
-def _builder_config(connector: Connector) -> dict[str, Any]:
+def builder_config(connector: Connector) -> dict[str, Any]:
+    """The config `build_connector` needs for this row: its JSONB plus the row facts."""
     config = dict(connector.config)
     # The row's own id, so a connector that proxies through this API (`local`)
     # can address and sign its media route. Kept out of the JSONB column: it is
@@ -64,7 +65,7 @@ async def open_storage(connector: Connector) -> StorageConnector:
     storage should fail loudly, not run against nothing.
     """
     secret = await resolve_secret(connector.secret_ref)
-    return build_connector(connector.type.value, _builder_config(connector), secret)
+    return build_connector(connector.type.value, builder_config(connector), secret)
 
 
 @dataclass(eq=False)
@@ -96,7 +97,7 @@ class ConnectorPool:
     @asynccontextmanager
     async def lease(self, connector: Connector) -> AsyncIterator[StorageConnector]:
         secret = await resolve_secret(connector.secret_ref)
-        config = _builder_config(connector)
+        config = builder_config(connector)
         fingerprint = hashlib.sha256(
             json.dumps([connector.type.value, config, secret], sort_keys=True, default=str).encode()
         ).hexdigest()

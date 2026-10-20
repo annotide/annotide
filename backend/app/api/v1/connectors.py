@@ -27,7 +27,7 @@ from app.services.licensing.features import refusal_message as feature_refusal
 from app.services.licensing.state import EffectiveLicense
 from app.services.repository import get_or_404, paginate
 from app.services.secrets import SecretResolutionError, resolve_secret
-from app.services.storage import connector_pool
+from app.services.storage import builder_config, connector_pool
 
 router = APIRouter(prefix="/connectors", tags=["connectors"])
 
@@ -265,7 +265,7 @@ async def check_connector(
 
     try:
         async with asyncio.timeout(_CHECK_TIMEOUT_SECONDS):
-            instance = build_connector(connector.type.value, connector.config, secret)
+            instance = build_connector(connector.type.value, builder_config(connector), secret)
             try:
                 result = await instance.check()
             finally:
