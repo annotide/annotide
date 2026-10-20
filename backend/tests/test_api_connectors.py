@@ -303,6 +303,46 @@ class TestCheck:
         assert body["ok"] is False
         assert body["messages"]
 
+    def test_builds_with_the_rows_identity_type(
+        self,
+        app: FastAPI,
+        client: TestClient,
+        sessionmaker: async_sessionmaker[AsyncSession],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        # The identity lives in its own column; a row created through the API
+        # has none in `config`, and Check must not report it as missing.
+        connector = _seed_connector(
+            sessionmaker,
+            type_=ConnectorType.AZURE_BLOB,
+            identity_type=ConnectorIdentity.ACCOUNT_KEY,
+            secret_ref="env:TEST_CHECK_BLOB_KEY",
+            config={"account_url": "https://acct.blob.core.windows.net", "container": "media"},
+        )
+        monkeypatch.setenv("TEST_CHECK_BLOB_KEY", "a-key")
+        _login(app)
+        built: dict[str, Any] = {}
+
+        class _OkConnector:
+            async def check(self) -> ConnectorCheck:
+                return ConnectorCheck(ok=True, messages=["reachable"])
+
+            async def aclose(self) -> None:
+                return None
+
+        def _build(type_: str, config: dict[str, Any], secret: str | None) -> _OkConnector:
+            built.update(type=type_, config=config, secret=secret)
+            return _OkConnector()
+
+        monkeypatch.setattr("app.api.v1.connectors.build_connector", _build)
+
+        response = client.post(f"/api/v1/connectors/{connector.id}/check")
+        assert response.status_code == 200
+        assert response.json()["ok"] is True
+        assert built["config"]["identity_type"] == "account_key"
+        assert built["config"]["container"] == "media"
+        assert built["secret"] == "a-key"
+
     def test_never_500s_on_a_timeout(
         self,
         app: FastAPI,
