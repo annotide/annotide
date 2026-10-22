@@ -17,6 +17,9 @@ you register.
 | AWS: Terraform, then the Helm chart | Production on AWS (EKS, RDS, ElastiCache, S3) | [Terraform README](../infra/terraform/aws/README.md) |
 | Google Cloud: Terraform, then the Helm chart | Production on Google Cloud (GKE, Cloud SQL, Memorystore, Cloud Storage) | [Terraform README](../infra/terraform/gcp/README.md) |
 
+Running it for one person or one team on a budget: see
+[§8, Keeping the cost down on Azure](#8-keeping-the-cost-down-on-azure).
+
 The "Docker Compose from source" stack (`docker-compose.yml` at the repo
 root) includes emulated storage, development passwords and a mail catcher.
 Do not expose it to the internet. The quick install below is the
@@ -171,3 +174,90 @@ connector a reference (`azurekeyvault://…`, `awssecrets://…`,
 
 Every setting is an environment variable listed in
 [CONTRACTS.md → Environment variables](CONTRACTS.md#environment-variables-ops-1).
+
+## 8. Keeping the cost down on Azure
+
+A person or a team can run their own install and pay only for the Azure
+resources it uses; Annotide itself is free for up to three active users (Community).
+Nothing here scales to zero by itself: the worker runs scheduled jobs
+(outbox publishing, lock clean-up), so something stays up while the install
+is on. What costs nothing is an install that is **stopped** when nobody uses
+it.
+
+Approximate pay-as-you-go prices, West Europe, without VAT, October 2026.
+Check your region in the [Azure pricing calculator](https://azure.microsoft.com/pricing/calculator/);
+a one-year savings plan takes roughly a third off anything that runs all
+the time.
+
+| Setup | For | Running | Stopped |
+| ----- | --- | ------- | ------- |
+| Quick install on one VM (`Standard_B2ms`, 2 vCPU / 8 GB) | One person or a small team | about €60 / month; about €20 on working hours only | disk and IP, a few € |
+| Azure Marketplace, 1 × `Standard_D2as_v5` node | A small team that wants AKS | about €100 / month | disks and networking, about €20 |
+| Azure Marketplace, 1 × `Standard_D4s_v5` node (the default) | A team, large images | about €180 / month | disks and networking, about €20 |
+| Terraform with the small settings below | A team that wants managed PostgreSQL | about €140 / month | storage and networking, about €25 |
+| Terraform defaults | Production | €500+ / month | n/a |
+
+### One VM with the quick install
+
+The cheapest way for a small team: §2 on a Linux VM.
+
+1. Create an Ubuntu VM (`Standard_B2ms`). Give its public IP a DNS name
+   label (Networking → the IP → Configuration): you get
+   `<label>.<region>.cloudapp.azure.com` for free.
+2. Network security group: allow 80 and 443 from the internet and 22 only
+   from your own address.
+3. Install Docker, then run the quick install (§2).
+4. Put HTTPS in front of it (the app refuses sign-in over plain HTTP beyond
+   localhost, see [`deploy/personal/README.md`](../deploy/personal/README.md#exposing-this-beyond-localhost)).
+   Caddy gets the certificate by itself; its whole `/etc/caddy/Caddyfile`:
+
+   ```
+   <label>.<region>.cloudapp.azure.com {
+       reverse_proxy 127.0.0.1:8080
+   }
+   ```
+
+   Then set `APP_FRONTEND_URL=https://<label>.<region>.cloudapp.azure.com`
+   in the install's `.env` and run `docker compose up -d`, so links in
+   e-mails and sign-in redirects use that address.
+
+5. VM → Operations → **Auto-shutdown** stops it every evening for free.
+   Start it from the portal (or `az vm start`) in the morning; the data
+   stays on its disk. Back up as in the quick install README.
+
+### Azure Marketplace
+
+Pick a 2 vCPU / 8 GB node (`Standard_D2as_v5` or `Standard_D2s_v5`) in the
+install form for about half the cost of the default. It fits a small team;
+tiling very large images takes longer. Choose the bigger node when people
+work on whole-slide or satellite images all day.
+
+Stop the whole cluster when nobody needs it, and start it again later:
+
+```sh
+az aks stop  --resource-group <group> --name <cluster>
+az aks start --resource-group <group> --name <cluster>
+```
+
+The in-cluster database keeps its data on a retained disk, so a stop and a
+start lose nothing. To do it on a schedule (evenings and weekends), run the
+same two commands from an Azure Automation runbook whose managed identity
+may start and stop the cluster (Contributor on the cluster resource).
+
+### Terraform: small settings
+
+[`infra/terraform/azure`](../infra/terraform/azure/README.md) defaults to
+production sizes. For a small team, in `terraform.tfvars`:
+
+```hcl
+node_vm_size        = "Standard_D2as_v5"
+node_count          = { min = 1, max = 3 }
+postgres_sku        = "B_Standard_B1ms"
+postgres_storage_mb = 32768
+redis_sku           = { name = "Basic", family = "C", capacity = 0 }
+```
+
+Burstable PostgreSQL and Basic Redis have no failover and Basic Redis no
+SLA; fine for a team, not for production. Stop and start as above, plus
+`az postgres flexible-server stop|start`. Azure starts a stopped PostgreSQL
+server again after seven days.

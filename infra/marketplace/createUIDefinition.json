@@ -101,18 +101,20 @@
                 "name": "vmSize",
                 "type": "Microsoft.Compute.SizeSelector",
                 "label": "VM size",
-                "toolTip": "The size of virtual machine for VM.",
+                "toolTip": "Node size. 4 vCPU / 16 GB (D4s_v5, D4as_v5) is the default. 2 vCPU / 8 GB (D2as_v5, D2s_v5) costs about half and fits a small team; large-image tiling is slower. The cluster can be stopped when unused: see annotide.com/docs/install.",
                 "recommendedSizes": [
                   "Standard_D4s_v5",
                   "Standard_D4as_v5",
-                  "Standard_D8s_v5",
-                  "Standard_D4s_v3",
-                  "Standard_B4ms"
+                  "Standard_D2as_v5",
+                  "Standard_D2s_v5",
+                  "Standard_D8s_v5"
                 ],
                 "constraints": {
                   "allowedSizes": [
                     "Standard_D4s_v5",
                     "Standard_D4as_v5",
+                    "Standard_D2as_v5",
+                    "Standard_D2s_v5",
                     "Standard_D8s_v5",
                     "Standard_D4s_v3",
                     "Standard_B4ms"

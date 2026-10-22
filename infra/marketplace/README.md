@@ -19,6 +19,11 @@ copies the bundle built here into its own public registry.
 ## The install form
 
 - **Cluster:** create a new AKS cluster, or pick one in the resource group.
+  A new cluster gets one `Standard_D4s_v5` node by default; 2 vCPU / 8 GB
+  sizes (`Standard_D2as_v5`, `Standard_D2s_v5`) are offered for about half
+  the cost. Annotide's own pods request about 0.85 vCPU and 1.5 GiB with the
+  in-cluster database. Costs and stopping the cluster when unused:
+  [INSTALL.md §8](../../docs/INSTALL.md#8-keeping-the-cost-down-on-azure).
 - **Database:** "Deploy in the cluster" by default, with a warning and a
   required acknowledgement of the risks (no backups, no failover, data
   deleted with the cluster; [chart README](../helm/annotide/README.md#risks-of-running-the-database-in-the-cluster)).
