@@ -427,6 +427,18 @@ jobs:
             terraform -chdir="$dir" validate
           done
 
+      # The Deploy to Azure button reads the committed azuredeploy.json, so it
+      # must be main.bicep's build output (same Bicep version: the build
+      # stamps it into the file).
+      - name: Bicep (Container Apps template)
+        run: |
+          # The runner image has its own bicep on PATH; use the pinned one.
+          az config set bicep.use_binary_from_path=false
+          az bicep install --version v0.48.1
+          az bicep lint --file infra/azure-container-apps/main.bicep
+          az bicep build --file infra/azure-container-apps/main.bicep --outfile "$RUNNER_TEMP/azuredeploy.json"
+          diff -u infra/azure-container-apps/azuredeploy.json "$RUNNER_TEMP/azuredeploy.json"
+
       - name: Trivy misconfiguration scan
         run: |
           for dir in infra/terraform/azure infra/terraform/aws infra/terraform/gcp; do

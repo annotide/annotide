@@ -13,6 +13,7 @@ you register.
 | Docker Compose from source | Evaluation, demos, development | [README → Quick start](../README.md#development-quick-start) |
 | Kubernetes with the Helm chart | Production on any cloud or on premises | [Helm chart README](../infra/helm/annotide/README.md) |
 | Kubernetes with the Helm chart and the in-cluster database (the Azure Marketplace default) | Evaluations, pilots and small teams that run their own backups. [Read the risks](../infra/helm/annotide/README.md#risks-of-running-the-database-in-the-cluster) first | [Helm chart README → In-cluster PostgreSQL and Valkey](../infra/helm/annotide/README.md#in-cluster-postgresql-and-valkey) |
+| Azure Container Apps, scaled to zero when idle (Deploy to Azure button) | One person or a team on Azure, not used all day | [Container Apps README](../infra/azure-container-apps/README.md) |
 | Azure: Terraform, then the Helm chart | Production on Azure, private networking (SEC-1) | [Terraform README](../infra/terraform/azure/README.md) |
 | AWS: Terraform, then the Helm chart | Production on AWS (EKS, RDS, ElastiCache, S3) | [Terraform README](../infra/terraform/aws/README.md) |
 | Google Cloud: Terraform, then the Helm chart | Production on Google Cloud (GKE, Cloud SQL, Memorystore, Cloud Storage) | [Terraform README](../infra/terraform/gcp/README.md) |
@@ -179,10 +180,10 @@ Every setting is an environment variable listed in
 
 A person or a team can run their own install and pay only for the Azure
 resources it uses; Annotide itself is free for up to three active users (Community).
-Nothing here scales to zero by itself: the worker runs scheduled jobs
-(outbox publishing, lock clean-up), so something stays up while the install
-is on. What costs nothing is an install that is **stopped** when nobody uses
-it.
+Only the Container Apps setup scales to zero by itself: it wakes on a
+request or on work for the worker and sleeps again after a few idle minutes.
+The others keep running until you **stop** them, which is what makes them
+cheap when nobody uses them.
 
 Approximate pay-as-you-go prices, West Europe, without VAT, October 2026.
 Check your region in the [Azure pricing calculator](https://azure.microsoft.com/pricing/calculator/);
@@ -191,11 +192,21 @@ the time.
 
 | Setup | For | Running | Stopped |
 | ----- | --- | ------- | ------- |
+| Azure Container Apps, scaled to zero | One person or a team, not all day | about €18 / month idle, plus about €0.17 per hour in use | (sleeps by itself) |
 | Quick install on one VM (`Standard_B2ms`, 2 vCPU / 8 GB) | One person or a small team | about €60 / month; about €20 on working hours only | disk and IP, a few € |
 | Azure Marketplace, 1 × `Standard_D2as_v5` node | A small team that wants AKS | about €100 / month | disks and networking, about €20 |
 | Azure Marketplace, 1 × `Standard_D4s_v5` node (the default) | A team, large images | about €180 / month | disks and networking, about €20 |
 | Terraform with the small settings below | A team that wants managed PostgreSQL | about €140 / month | storage and networking, about €25 |
 | Terraform defaults | Production | €500+ / month | n/a |
+
+### Azure Container Apps
+
+[`infra/azure-container-apps`](../infra/azure-container-apps/README.md):
+one Deploy to Azure button creates the app, a small PostgreSQL server and a
+storage account. The app runs as one replica that scales to zero when idle;
+the first request after a quiet spell takes a few seconds. Only PostgreSQL
+bills while nobody works. One replica fits a team; for whole-slide or
+satellite images all day, use AKS.
 
 ### One VM with the quick install
 
