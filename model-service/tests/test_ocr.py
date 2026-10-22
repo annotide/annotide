@@ -403,7 +403,11 @@ class TestAnthropicEngine:
         image, prompt = body["messages"][0]["content"]
         assert image["type"] == "image" and image["source"]["media_type"] == "image/png"
         assert prompt["type"] == "text" and "0-1000 grid" in prompt["text"]
-        assert request.headers["x-api-key"] == "test-key"
+        # anthropic 1.x sends the key as x-api-key, 2.x as a bearer token.
+        assert "test-key" in (
+            request.headers.get("x-api-key"),
+            request.headers.get("Authorization", "").removeprefix("Bearer "),
+        )
 
     async def test_options_off_refusals_and_errors(self, httpserver: Any) -> None:
         bodies: list[dict[str, Any]] = []
