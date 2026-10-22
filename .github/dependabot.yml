@@ -31,6 +31,11 @@ updates:
       eslint:
         patterns: ["eslint", "eslint-plugin-*", "@typescript-eslint/*"]
         update-types: ["major"]
+    ignore:
+      # Node's types follow the Node major CI and the images run (NODE_VERSION
+      # in ci.yml); move them together with it, by hand.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: docker
     directories: ["/backend", "/frontend", "/model-service"]
     schedule: { interval: monthly }
