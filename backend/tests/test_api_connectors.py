@@ -2,8 +2,9 @@
 
 No live database: each test gets a fresh in-memory SQLite database (an async
 engine on a `StaticPool`, so the same connection survives across the
-requests a single test makes) with only the `connector` table, and
-`app.api.deps.get_current_user` is overridden with a fake `CurrentUser`
+requests a single test makes) with the tables these routes touch and
+foreign keys enforced, as PostgreSQL does (SQLite ignores them unless asked),
+and `app.api.deps.get_current_user` is overridden with a fake `CurrentUser`
 instead of decoding a real JWT.
 """
 
@@ -19,8 +20,10 @@ from typing import Any, cast
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import Table
+from sqlalchemy import Table, event, insert, select
+from sqlalchemy.dialects.postgresql import CITEXT
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.pool import StaticPool
 
 from app.api.deps import CurrentUser, get_current_user
@@ -28,13 +31,41 @@ from app.connectors.base import ConnectorCheck
 from app.db.base import Base
 from app.db.session import get_session
 from app.main import create_app
-from app.models import AuditEvent, Connector, ConnectorIdentity, ConnectorType
+from app.models import (
+    AuditEvent,
+    Connector,
+    ConnectorIdentity,
+    ConnectorType,
+    Item,
+    LabelSchema,
+    MediaType,
+    Organization,
+    Project,
+    User,
+)
 
 ORG_ID = uuid.uuid4()
 OTHER_ORG_ID = uuid.uuid4()
 ADMIN_ID = uuid.uuid4()
 
-_TABLES = cast("list[Table]", [AuditEvent.__table__, Connector.__table__])
+
+@compiles(CITEXT, "sqlite")  # pragma: no cover - exercised implicitly by every test
+def _compile_citext_as_varchar(element: object, compiler: object, **kw: object) -> str:
+    return "VARCHAR"
+
+
+_TABLES = cast(
+    "list[Table]",
+    [
+        AuditEvent.__table__,
+        Organization.__table__,
+        User.__table__,
+        Connector.__table__,
+        Project.__table__,
+        LabelSchema.__table__,
+        Item.__table__,
+    ],
+)
 
 
 def _run[T](coro: Coroutine[Any, Any, T]) -> T:
@@ -49,9 +80,26 @@ def engine() -> Iterator[Any]:
         connect_args={"check_same_thread": False},
     )
 
+    @event.listens_for(eng.sync_engine, "connect")
+    def _enforce_foreign_keys(dbapi_connection: Any, _record: Any) -> None:
+        dbapi_connection.execute("PRAGMA foreign_keys=ON")
+
     async def _create() -> None:
         async with eng.begin() as conn:
             await conn.run_sync(Base.metadata.create_all, tables=_TABLES)
+            for org_id in (ORG_ID, OTHER_ORG_ID):
+                await conn.execute(
+                    insert(Organization).values(id=org_id, name=str(org_id), slug=str(org_id))
+                )
+            # audit_event.actor_id references user.id.
+            await conn.execute(
+                insert(User).values(
+                    id=ADMIN_ID,
+                    organization_id=ORG_ID,
+                    email="admin@example.com",
+                    display_name="Admin",
+                )
+            )
 
     _run(_create())
     yield eng
@@ -129,6 +177,48 @@ def _seed_connector(
             return connector
 
     return _run(_create())
+
+
+def _seed_project(
+    sessionmaker: async_sessionmaker[AsyncSession],
+    *,
+    name: str = "proj",
+    source_connector_id: uuid.UUID | None = None,
+) -> Project:
+    async def _create() -> Project:
+        async with sessionmaker() as session:
+            project = Project(
+                organization_id=ORG_ID, name=name, source_connector_id=source_connector_id
+            )
+            session.add(project)
+            await session.commit()
+            await session.refresh(project)
+            return project
+
+    return _run(_create())
+
+
+def _seed_item(
+    sessionmaker: async_sessionmaker[AsyncSession],
+    *,
+    project_id: uuid.UUID,
+    connector_id: uuid.UUID,
+    path: str = "a.png",
+) -> None:
+    async def _create() -> None:
+        async with sessionmaker() as session:
+            session.add(
+                Item(
+                    project_id=project_id,
+                    connector_id=connector_id,
+                    path=path,
+                    media_type=MediaType.IMAGE,
+                    size_bytes=1,
+                )
+            )
+            await session.commit()
+
+    _run(_create())
 
 
 class TestList:
@@ -235,11 +325,78 @@ class TestUpdateAndDelete:
         connector = _seed_connector(sessionmaker)
         _login(app)
 
+        # A project that only names it as source is detached; an item on
+        # another connector does not block the delete.
+        project = _seed_project(sessionmaker, source_connector_id=connector.id)
+        other = _seed_connector(sessionmaker, name="other")
+        _seed_item(sessionmaker, project_id=project.id, connector_id=other.id)
+        _login(app)
+
         response = client.delete(f"/api/v1/connectors/{connector.id}")
         assert response.status_code == 204
 
         follow_up = client.get(f"/api/v1/connectors/{connector.id}")
         assert follow_up.status_code == 404
+
+        async def _state() -> tuple[uuid.UUID | None, list[str]]:
+            async with sessionmaker() as session:
+                refreshed = await session.get(Project, project.id)
+                assert refreshed is not None
+                actions = (
+                    await session.scalars(
+                        select(AuditEvent.action).where(AuditEvent.target_id == connector.id)
+                    )
+                ).all()
+                return refreshed.source_connector_id, list(actions)
+
+        source_id, actions = _run(_state())
+        assert source_id is None
+        assert actions == ["connector.delete"]
+
+    def test_delete_refused_while_items_use_it(
+        self, app: FastAPI, client: TestClient, sessionmaker: async_sessionmaker[AsyncSession]
+    ) -> None:
+        connector = _seed_connector(sessionmaker)
+        # The project moved to another source; its old items stay on this one.
+        busy = _seed_project(sessionmaker, name="busy")
+        quiet = _seed_project(sessionmaker, name="quiet")
+        for path in ("a.png", "b.png"):
+            _seed_item(sessionmaker, project_id=busy.id, connector_id=connector.id, path=path)
+        _seed_item(sessionmaker, project_id=quiet.id, connector_id=connector.id)
+        _login(app)
+
+        response = client.delete(f"/api/v1/connectors/{connector.id}")
+        assert response.status_code == 409
+        body = response.json()
+        assert body["type"].endswith("connector-in-use")
+        assert "3 item(s) in 2 project(s)" in body["detail"]
+        assert body["item_count"] == 3
+        assert body["project_count"] == 2
+        assert [(p["name"], p["item_count"]) for p in body["projects"]] == [
+            ("busy", 2),
+            ("quiet", 1),
+        ]
+        assert body["projects"][0]["id"] == str(busy.id)
+
+        assert client.get(f"/api/v1/connectors/{connector.id}").status_code == 200
+
+    def test_delete_allowed_once_projects_are_gone(
+        self, app: FastAPI, client: TestClient, sessionmaker: async_sessionmaker[AsyncSession]
+    ) -> None:
+        connector = _seed_connector(sessionmaker)
+        project = _seed_project(sessionmaker)
+        _seed_item(sessionmaker, project_id=project.id, connector_id=connector.id)
+        _login(app)
+        assert client.delete(f"/api/v1/connectors/{connector.id}").status_code == 409
+
+        async def _drop_project() -> None:
+            async with sessionmaker() as session:
+                doomed = await session.get(Project, project.id)
+                await session.delete(doomed)
+                await session.commit()
+
+        _run(_drop_project())
+        assert client.delete(f"/api/v1/connectors/{connector.id}").status_code == 204
 
     def test_403_for_non_superuser(
         self, app: FastAPI, client: TestClient, sessionmaker: async_sessionmaker[AsyncSession]

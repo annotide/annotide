@@ -12,12 +12,13 @@ import asyncio
 from uuid import UUID
 
 from fastapi import APIRouter, status
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import ClientIpDep, LicenceDep, PageParamsDep, SessionDep, SuperuserDep
-from app.api.errors import LicenceFeatureError
+from app.api.errors import ConnectorInUseError, LicenceFeatureError
 from app.connectors.registry import build_connector
-from app.models import Connector
+from app.models import Connector, Item, Project
 from app.models import ConnectorIdentity as DbConnectorIdentity
 from app.models import ConnectorType as DbConnectorType
 from app.schemas import BaseSchema, ConnectorCreate, ConnectorRead, ConnectorUpdate, Page
@@ -212,14 +213,66 @@ async def delete_connector(
     connector_id: UUID,
     session: SessionDep,
     current_user: SuperuserDep,
+    client_ip: ClientIpDep,
 ) -> None:
-    """Delete a connector."""
+    """Delete a connector.
+
+    409 `connector-in-use` while any item still points at it: `item.connector_id`
+    has no ON DELETE rule, so the database would refuse the delete anyway. The
+    problem detail names the projects concerned. Projects that merely reference
+    the connector as source, result or cache are detached (SET NULL).
+    """
     connector = await get_or_404(
         session, Connector, connector_id, organization_id=current_user.organization_id
+    )
+    await _refuse_if_in_use(session, connector)
+    audit.record(
+        session,
+        organization_id=current_user.organization_id,
+        actor_id=current_user.id,
+        action="connector.delete",
+        target_type="connector",
+        target_id=connector.id,
+        before=_audit_after(connector),
+        ip=client_ip,
     )
     await session.delete(connector)
     await session.commit()
     connector_pool().discard(connector_id)
+
+
+_IN_USE_PROJECTS_SHOWN = 20
+
+
+async def _refuse_if_in_use(session: AsyncSession, connector: Connector) -> None:
+    """Raise `ConnectorInUseError` when items still point at `connector`."""
+    item_count = func.count(Item.id).label("item_count")
+    rows = (
+        await session.execute(
+            select(Project.id, Project.name, item_count)
+            .join(Item, Item.project_id == Project.id)
+            .where(Item.connector_id == connector.id)
+            .group_by(Project.id, Project.name)
+            .order_by(item_count.desc(), Project.name)
+        )
+    ).all()
+    if not rows:
+        return
+    total = sum(row.item_count for row in rows)
+    shown = rows[:_IN_USE_PROJECTS_SHOWN]
+    names = ", ".join(row.name for row in shown)
+    more = f" and {len(rows) - len(shown)} more" if len(rows) > len(shown) else ""
+    raise ConnectorInUseError(
+        f"{total} item(s) in {len(rows)} project(s) still use this connector "
+        f"({names}{more}). Delete those projects first.",
+        extra={
+            "item_count": total,
+            "project_count": len(rows),
+            "projects": [
+                {"id": str(row.id), "name": row.name, "item_count": row.item_count} for row in shown
+            ],
+        },
+    )
 
 
 @router.post(

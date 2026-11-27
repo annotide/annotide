@@ -146,6 +146,13 @@ class TaskLockedError(ConflictError):
     title = "Task is locked by another user"
 
 
+class ConnectorInUseError(ConflictError):
+    """Items still point at the connector, so it cannot be deleted (SRC-1)."""
+
+    error_type = "connector-in-use"
+    title = "Connector is in use"
+
+
 class TrialUnavailableError(ConflictError):
     """No trial for this installation (LIC-34)."""
 

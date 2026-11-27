@@ -12436,7 +12436,7 @@
     },
     "/api/v1/connectors/{connector_id}": {
       "delete": {
-        "description": "Delete a connector.",
+        "description": "Delete a connector.\n\n409 `connector-in-use` while any item still points at it: `item.connector_id`\nhas no ON DELETE rule, so the database would refuse the delete anyway. The\nproblem detail names the projects concerned. Projects that merely reference\nthe connector as source, result or cache are detached (SET NULL).",
         "operationId": "delete_connector_api_v1_connectors__connector_id__delete",
         "parameters": [
           {
